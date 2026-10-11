@@ -15,3 +15,4 @@ export * as media from './modules/media';
 export * as admin from './modules/admin';
 export * as notifications from './modules/notifications';
 export type { Actor } from './modules/identity';
+export { vapidKeys } from './modules/providers';

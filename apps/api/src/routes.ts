@@ -5,14 +5,20 @@ import {
   JobAnswerBody, MatchRespondBody, MediaUploadBody, OtpStartBody, OtpVerifyBody, ProviderSettingsBody, RatingBody, ReceiptBody,
   RefreshBody, ReportBody, SendMessageBody, UpdateMeBody, VerificationBody,
 } from '@sm/contracts';
-import { asrAvailable, config, conversations, identity, intake, matching, media, safety, trust } from '@sm/core';
+import { asrAvailable, config, conversations, identity, intake, matching, media, safety, trust, vapidKeys } from '@sm/core';
 import { requireAuth } from './server';
 
 const IdParams = z.object({ id: z.string().uuid() });
 const id = (req: FastifyRequest) => IdParams.parse(req.params).id;
 
 export function registerRoutes(app: FastifyInstance) {
-  app.get('/v1/config', async () => ({ voiceInput: asrAvailable(), termsVersion: config.termsVersion, locales: ['mr', 'hi', 'en'] }));
+  app.get('/v1/config', async () => ({
+    voiceInput: asrAvailable(),
+    termsVersion: config.termsVersion,
+    locales: ['mr', 'hi', 'en'],
+    // Public half of the browser push key; the web app needs it to subscribe.
+    webPushKey: (await vapidKeys()).publicKey,
+  }));
 
   // ---- sign-in
   app.post('/v1/auth/otp/start', async (req) => identity.startOtp(OtpStartBody.parse(req.body).phone, req.ip));

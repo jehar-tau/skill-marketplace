@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { api } from '../lib/api';
 import { LOCALITIES } from '../lib/config';
-import { currentPlace, enablePush, notificationsGranted, openBatterySettings, savePlace } from '../lib/device';
+import { currentPlace, enablePush, notificationsGranted, openBatterySettings, pushPossible, savePlace } from '../lib/device';
 import { formatWhen } from '../lib/i18n';
 import { getItem, setItem } from '../lib/storage';
 import { useTheme } from '../lib/theme';
@@ -68,7 +68,8 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
     });
     // Alerts are asked for only once there is something to be alerted about.
     notificationsGranted().then((g) => {
-      setPushOn(g || Platform.OS === 'web');
+      // Where the browser cannot do push at all, there is nothing to ask for.
+      setPushOn(g || !pushPossible());
       if (g) void enablePush(false);
     });
   }, [hasService]);

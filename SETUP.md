@@ -215,11 +215,17 @@ Neither asks for a card on the free plan, as far as I could find.
 
 If the server fails to start with a database login error for `sm_app`, set `DATABASE_APP_URL` to the same value as `DATABASE_OWNER_URL` and redeploy. The app works the same; it only loses the second layer of database access rules, which is acceptable for a test server.
 
-### 7d. Point the app at it
-1. Put the Render address in `apps/mobile/eas.json` under `staging`.
-2. Build the staging app: on this Mac run `APP_ENV=staging pnpm build:apk https://<that address>`, or use the Expo cloud build with `--profile staging`.
+### 7d. Start testing: just open the address
+The server also serves the web app. On any phone, open `https://<that address>` in Chrome, choose a side, and sign in with a number from `PILOT_PHONES` and your `PILOT_CODE`.
+
+- **Add to Home screen** (browser menu) makes it open like an app.
+- **Alerts:** when a provider adds their first service the app asks to turn on alerts. On Android this works in Chrome. On iPhone it works only after "Add to Home Screen".
+- To keep the free server from sleeping while people test, set the repository variable `STAGING_URL` to the address (GitHub → Settings → Secrets and variables → Actions → Variables). A scheduled job then visits it every 10 minutes during the day.
 
 The operations console is at `https://<that address>/admin`; its password is the generated `ADMIN_TOKEN` shown in Render's Environment tab.
+
+### 7e. Later: the Android app against the same server
+Put the Render address in `apps/mobile/eas.json` under `staging`, then run `APP_ENV=staging pnpm build:apk https://<that address>` on this Mac, or use the Expo cloud build with `--profile staging`.
 
 ### What the free server cannot do
 - **It sleeps.** The first request after a quiet spell takes about a minute, and a request posted while it sleeps is only sent to providers once it wakes. Real users need the paid instance (about $7 a month).
