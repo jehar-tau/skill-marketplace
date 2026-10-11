@@ -15,7 +15,7 @@ let boss: PgBoss | null = null;
 
 export async function startJobs(): Promise<PgBoss> {
   // The queue lives in its own schema, owned by the migration role.
-  boss = new PgBoss({ connectionString: config.DATABASE_OWNER_URL, schema: 'pgboss' });
+  boss = new PgBoss({ connectionString: config.DATABASE_OWNER_URL, schema: 'pgboss', max: config.DB_JOBS_POOL_MAX });
   boss.on('error', (e) => console.error('[jobs]', e));
   await boss.start();
   for (const name of Object.values(JOBS)) await boss.createQueue(name);

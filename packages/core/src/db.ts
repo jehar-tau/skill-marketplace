@@ -5,8 +5,8 @@ import { config } from './config';
 pg.types.setTypeParser(20, (v) => Number(v));
 pg.types.setTypeParser(1700, (v) => Number(v));
 
-export const appPool = new pg.Pool({ connectionString: config.DATABASE_APP_URL, max: 20 });
-export const ownerPool = new pg.Pool({ connectionString: config.DATABASE_OWNER_URL, max: 4 });
+export const appPool = new pg.Pool({ connectionString: config.DATABASE_APP_URL, max: config.DB_POOL_MAX });
+export const ownerPool = new pg.Pool({ connectionString: config.DATABASE_OWNER_URL, max: 2 });
 
 type Row = Record<string, any>;
 

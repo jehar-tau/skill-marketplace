@@ -169,6 +169,65 @@ Once you move off the test number, each alert costs about ₹0.115. Replies to p
 
 Neither 6a nor 6b has been run against the live services yet.
 
+## Step 7 — A free hosted test server (staging)
+
+This puts the server on the internet so testers anywhere can use the app, without your Mac being on. Two free accounts cover everything:
+
+| Account | Gives you | Free allowance (reported; check their pricing pages) |
+| --- | --- | --- |
+| **Supabase** | The database and photo storage | 500 MB database, about 1 GB of files, 2 projects. A project pauses after 7 days with no activity; you un-pause it from the dashboard. |
+| **Render** | The server itself and Redis | One small server, 750 hours a month. It sleeps after 15 quiet minutes and takes about a minute to wake. |
+
+Neither asks for a card on the free plan, as far as I could find.
+
+### 7a. Supabase: database
+1. Sign up at https://supabase.com and click **New project**. Name it `skill-marketplace-staging`, choose region **Southeast Asia (Singapore)** (same region as the server, which keeps it fast), and set a database password. Save that password.
+2. When the project is ready, click **Connect** at the top and find **Session pooler**. Copy that connection string. It looks like:
+   `postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`
+   Put your password in place of `[YOUR-PASSWORD]`. This is your **owner address**.
+3. Make up a second password for the app's own restricted login (letters and digits only). Your **app address** is the same string with `postgres.` changed to `sm_app.` and this second password:
+   `postgresql://sm_app.abcdefgh:SECONDPASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`
+
+### 7b. Supabase: photo storage
+1. In the project open **Storage → New bucket**, name it `chat-media`, and leave it **private**.
+2. Open **Storage → Settings → S3 Connection**, turn it on, and click **New access key**. Note the **endpoint**, **region**, **access key ID** and **secret access key**.
+
+### 7c. Render: the server
+1. Sign up at https://render.com with your GitHub account and allow it to see the `skill-marketplace` repository.
+2. Click **New → Blueprint** and pick the repository. Render reads `render.yaml` and lists a web service and a Key Value (Redis) instance.
+3. It asks for the values below. Paste them into Render's form (not into this chat):
+
+   | Field | Value |
+   | --- | --- |
+   | `DATABASE_OWNER_URL` | the owner address from 7a |
+   | `DATABASE_APP_URL` | the app address from 7a |
+   | `DATABASE_APP_PASSWORD` | the second password from 7a |
+   | `PILOT_CODE` | six digits of your choice |
+   | `PILOT_PHONES` | testers' numbers, comma-separated |
+   | `SUPPORT_EMAIL` | an inbox you read |
+   | `AI_LLM_API_KEY`, `AI_EMBED_API_KEY` | your Gemini key (ideally a fresh one) |
+   | `AI_ASR_API_KEY` | your Groq key (ideally a fresh one) |
+   | `S3_ENDPOINT`, `S3_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from 7b |
+
+4. Click **Apply**. The first build takes several minutes. Render shows the address, like `https://skill-marketplace-staging.onrender.com`.
+
+**It worked if** opening `https://<that address>/health` shows `{"ok":true,"env":"staging"}`.
+
+If the server fails to start with a database login error for `sm_app`, set `DATABASE_APP_URL` to the same value as `DATABASE_OWNER_URL` and redeploy. The app works the same; it only loses the second layer of database access rules, which is acceptable for a test server.
+
+### 7d. Point the app at it
+1. Put the Render address in `apps/mobile/eas.json` under `staging`.
+2. Build the staging app: on this Mac run `APP_ENV=staging pnpm build:apk https://<that address>`, or use the Expo cloud build with `--profile staging`.
+
+The operations console is at `https://<that address>/admin`; its password is the generated `ADMIN_TOKEN` shown in Render's Environment tab.
+
+### What the free server cannot do
+- **It sleeps.** The first request after a quiet spell takes about a minute, and a request posted while it sleeps is only sent to providers once it wakes. Real users need the paid instance (about $7 a month).
+- **Redis is memory-only**, so rate-limit counters reset when it restarts. Nothing important is stored there.
+- **No backups** on the free database. Do not keep anything you cannot lose.
+
+This path was rehearsed on this Mac (the same image, in staging mode, against a local database) but has not been run on Supabase or Render themselves.
+
 ---
 
 ## Option B — fully open source, nothing to pay, running on this Mac

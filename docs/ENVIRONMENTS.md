@@ -40,6 +40,10 @@ Staging and production each need their own set of these. Staging can use the sma
 
 Already account-based and shared across environments by using separate keys or projects: Gemini (understanding and matching), Groq (voice), Firebase (push alerts), Fast2SMS or another provider (sign-in codes), Expo (app builds).
 
+### A free staging setup
+
+`render.yaml` describes a free staging server on Render, with Supabase for the database and photos. Step-by-step: [SETUP.md](../SETUP.md), Step 7. One free instance runs the API and worker together (`INLINE_WORKER=true`) with small connection pools (`DB_POOL_MAX=6`, `DB_JOBS_POOL_MAX=3`), because free database tiers allow about 15 connections.
+
 ## Settings per environment
 
 Every setting is listed in `.env.example`. The ones that must differ per environment:
