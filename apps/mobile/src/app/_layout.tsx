@@ -2,7 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { listenForPushes } from '../lib/device';
+import { linkWebManifest, listenForPushes } from '../lib/device';
 import { useTheme } from '../lib/theme';
 import { AppProvider } from '../state';
 
@@ -21,6 +21,7 @@ function PushRouter() {
 
 export default function Layout() {
   const th = useTheme();
+  useEffect(linkWebManifest, []);
   return (
     <SafeAreaProvider>
       <AppProvider>
