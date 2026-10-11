@@ -124,7 +124,8 @@ app.get('/v1/ws', { websocket: true }, (socket) => {
 
 // One process is enough for local development; production runs apps/worker separately.
 let stopWorker: (() => Promise<void>) | null = null;
-if (!config.isProd && process.env.INLINE_WORKER !== 'false') {
+// A single small hosted instance (free staging) can also run the worker in-process with INLINE_WORKER=true.
+if (config.INLINE_WORKER ? config.INLINE_WORKER === 'true' : !config.isProd) {
   stopWorker = await startWorker();
   console.log('[api] background worker running in-process');
 }
