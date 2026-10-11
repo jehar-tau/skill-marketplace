@@ -2,8 +2,20 @@ import { Platform } from 'react-native';
 
 // The Android emulator reaches the development machine at 10.0.2.2.
 // Set EXPO_PUBLIC_API_URL for a real phone or a deployed server.
-const DEFAULT_API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? (Platform.OS === 'android' ? 'http://10.0.2.2:4000' : 'http://localhost:4000');
+// Where the server is.
+// - A built app: EXPO_PUBLIC_API_URL, set at build time.
+// - The hosted web app: the same address the page was loaded from, since the server serves it.
+// - Development: the machine running the code (10.0.2.2 from the Android emulator).
+function defaultApiUrl(): string {
+  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
+  if (Platform.OS === 'web') {
+    const loc = (globalThis as { location?: { origin: string; port: string } }).location;
+    const devServer = !loc || ['8081', '8090', '19006'].includes(loc.port);
+    return devServer ? 'http://localhost:4000' : loc!.origin;
+  }
+  return Platform.OS === 'android' ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+}
+const DEFAULT_API_URL = defaultApiUrl();
 
 // Testers can point an installed build at a different server (tap the title five
 // times on the sign-in screen), so a new server address does not need a new build.

@@ -2,6 +2,7 @@ import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -121,6 +122,23 @@ app.get('/v1/ws', { websocket: true }, (socket) => {
     }
   });
 });
+
+// The web app, when it has been built (`pnpm build:web`), is served from the same
+// address as the API, so one URL is everything a tester needs.
+const webDir = join(ROOT, 'apps/mobile/dist');
+if (existsSync(join(webDir, 'index.html'))) {
+  await app.register(fastifyStatic, { root: webDir, wildcard: false, maxAge: '1h' });
+  const indexHtml = readFileSync(join(webDir, 'index.html'), 'utf8');
+  const RESERVED = /^\/(v1|admin|legal|health|app\.apk)(\/|$)/;
+  app.setNotFoundHandler((req, reply) => {
+    // Any other page address belongs to the app's own router.
+    if (req.method === 'GET' && !RESERVED.test(req.url) && !/\.[a-z0-9]{2,5}(\?|$)/i.test(req.url)) {
+      return reply.type('text/html').header('cache-control', 'no-cache').send(indexHtml);
+    }
+    return reply.status(404).send({ error: 'not_found' });
+  });
+  console.log('[api] serving the web app');
+}
 
 // One process is enough for local development; production runs apps/worker separately.
 let stopWorker: (() => Promise<void>) | null = null;

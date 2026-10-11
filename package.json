@@ -16,6 +16,7 @@
     "tunnel": "cloudflared tunnel --url http://localhost:4000",
     "db:reembed": "pnpm --filter @sm/core reembed",
     "eval": "pnpm --filter @sm/core eval",
-    "build:apk": "sh scripts/build-apk.sh"
+    "build:apk": "sh scripts/build-apk.sh",
+    "build:web": "pnpm --filter @sm/mobile export:web"
   }
 }

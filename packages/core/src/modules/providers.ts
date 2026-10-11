@@ -1,7 +1,9 @@
 // Outbound delivery adapters: SMS and push. Each has a development
 // implementation that logs, so the system runs end to end with no accounts.
 
+import webpush from 'web-push';
 import { config } from '../config';
+import { asSystem } from '../db';
 
 export interface PushMessage {
   to: string;
@@ -89,9 +91,46 @@ export async function sendOtpTwoFactor(phone: string, code: string): Promise<voi
   if (!res.ok || (body.Status && body.Status !== 'Success')) throw new Error(`2Factor rejected the OTP request (${res.status})`);
 }
 
-// Expo's push service delivers through FCM on Android. High priority and a
-// dedicated channel are what get a request alert shown promptly (spec §6).
-export async function sendPush(messages: PushMessage[]): Promise<boolean[]> {
+// ---------------------------------------------------------------- push
+// Two kinds of device: the installed app (an Expo push token, delivered through
+// FCM/APNs) and the web app in a browser (a Web Push subscription). Each token
+// says which it is, so one account can have both.
+
+const WEB_PREFIX = 'webpush:';
+let vapid: { publicKey: string; privateKey: string } | null = null;
+
+// The browser push key pair is created once per environment and kept in the database.
+export async function vapidKeys(): Promise<{ publicKey: string; privateKey: string }> {
+  if (vapid) return vapid;
+  const row = await asSystem(async (tx) => {
+    const existing = await tx.maybeOne(`SELECT value FROM server_keys WHERE name = 'vapid'`);
+    if (existing) return existing;
+    const fresh = webpush.generateVAPIDKeys();
+    await tx.exec(`INSERT INTO server_keys(name, value) VALUES ('vapid', $1) ON CONFLICT (name) DO NOTHING`, [JSON.stringify(fresh)]);
+    return tx.one(`SELECT value FROM server_keys WHERE name = 'vapid'`);
+  });
+  vapid = JSON.parse(row.value as string);
+  return vapid!;
+}
+
+async function sendWebPush(m: PushMessage): Promise<boolean | 'gone'> {
+  try {
+    const keys = await vapidKeys();
+    await webpush.sendNotification(JSON.parse(m.to.slice(WEB_PREFIX.length)), JSON.stringify({ title: m.title, body: m.body, data: m.data, channelId: m.channelId }), {
+      vapidDetails: { subject: `mailto:${config.SUPPORT_EMAIL}`, publicKey: keys.publicKey, privateKey: keys.privateKey },
+      TTL: m.channelId === 'requests' ? 600 : 3600,
+      urgency: m.channelId === 'requests' ? 'high' : 'normal',
+      timeout: 8000,
+    });
+    return true;
+  } catch (e) {
+    // 404/410: the browser dropped this subscription; the caller forgets the token.
+    const status = (e as { statusCode?: number }).statusCode;
+    return status === 404 || status === 410 ? 'gone' : false;
+  }
+}
+
+async function sendExpoPush(messages: PushMessage[]): Promise<boolean[]> {
   if (messages.length === 0) return [];
   if (config.PUSH_PROVIDER === 'dev') {
     devOutbox.push.push(...messages);
@@ -108,6 +147,7 @@ export async function sendPush(messages: PushMessage[]): Promise<boolean[]> {
           title: m.title,
           body: m.body,
           data: m.data,
+          // High priority and a dedicated channel are what get a request alert shown promptly on Android.
           priority: 'high',
           sound: 'default',
           channelId: m.channelId,
@@ -122,4 +162,22 @@ export async function sendPush(messages: PushMessage[]): Promise<boolean[]> {
   } catch {
     return messages.map(() => false);
   }
+}
+
+export async function sendPush(messages: PushMessage[]): Promise<boolean[]> {
+  const out: boolean[] = new Array(messages.length).fill(false);
+  const app: { m: PushMessage; i: number }[] = [];
+  const gone: string[] = [];
+  await Promise.all(
+    messages.map(async (m, i) => {
+      if (!m.to.startsWith(WEB_PREFIX)) return void app.push({ m, i });
+      const r = await sendWebPush(m);
+      if (r === 'gone') gone.push(m.to);
+      out[i] = r === true;
+    }),
+  );
+  const results = await sendExpoPush(app.map((a) => a.m));
+  app.forEach((a, k) => (out[a.i] = results[k] ?? false));
+  if (gone.length) await asSystem((tx) => tx.exec(`UPDATE sessions SET push_token = NULL WHERE push_token = ANY($1)`, [gone])).catch(() => undefined);
+  return out;
 }
