@@ -1,0 +1,21 @@
+{
+  "name": "skill-marketplace",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "infra:up": "docker compose up -d --build",
+    "infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @sm/core migrate",
+    "db:seed": "pnpm --filter @sm/core seed",
+    "dev:api": "pnpm --filter @sm/api dev",
+    "dev:worker": "pnpm --filter @sm/worker dev",
+    "dev:mobile": "pnpm --filter @sm/mobile start",
+    "test": "pnpm --filter @sm/core test",
+    "typecheck": "pnpm -r typecheck",
+    "ai:check": "pnpm --filter @sm/core ai:check",
+    "tunnel": "cloudflared tunnel --url http://localhost:4000",
+    "db:reembed": "pnpm --filter @sm/core reembed",
+    "eval": "pnpm --filter @sm/core eval",
+    "build:apk": "sh scripts/build-apk.sh"
+  }
+}

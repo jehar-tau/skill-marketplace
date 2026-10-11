@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operations console</title>
+<style>
+  :root { --bg:#f6f5f2; --card:#fff; --ink:#1c1b19; --mute:#6b6862; --line:#e4e1da; --accent:#0f6b57; --warn:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161513; --card:#201f1c; --ink:#eeece7; --mute:#a09c94; --line:#34322d; --accent:#5cc4a8; --warn:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0 12px 0 0; }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav button { background:none; border:0; padding:6px 10px; border-radius:6px; color:var(--mute); cursor:pointer; font:inherit; }
+  nav button.on { background:var(--card); color:var(--ink); box-shadow:0 0 0 1px var(--line); }
+  main { padding:16px; max-width:1100px; margin:0 auto; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:10px; margin-bottom:18px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .stat b { display:block; font-size:22px; }
+  .stat span { color:var(--mute); font-size:13px; }
+  h2 { font-size:15px; margin:20px 0 8px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+  th { color:var(--mute); font-weight:500; font-size:13px; }
+  tr:last-child td { border-bottom:0; }
+  .wrap { overflow-x:auto; }
+  button.act { font:inherit; font-size:13px; padding:4px 9px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; margin:0 4px 4px 0; }
+  button.act.danger { color:var(--warn); border-color:var(--warn); }
+  button.act.go { background:var(--accent); color:#fff; border-color:var(--accent); }
+  input, select { font:inherit; padding:6px 8px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  .mute { color:var(--mute); }
+  .login { max-width:360px; margin:80px auto; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px; display:grid; gap:10px; }
+  .chat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px; margin:8px 0; max-height:320px; overflow:auto; }
+  .chat div { padding:3px 0; }
+  .flag { color:var(--warn); font-size:12px; }
+  code { font-size:12px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $ = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const when = (d) => d ? new Date(d).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : '—';
+const short = (id) => id ? String(id).slice(0, 8) : '—';
+let token = '', name = '';
+try { token = sessionStorage.getItem('adminToken') || ''; name = sessionStorage.getItem('adminName') || ''; } catch {}
+let tab = 'overview';
+
+async function api(path, body) {
+  const res = await fetch('/admin/api' + path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'x-admin-token': token, 'x-admin-name': name, ...(body ? { 'content-type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { token = ''; render(); throw new Error('unauthorized'); }
+  const json = await res.json();
+  if (!res.ok) { alert(json.message || json.error); throw new Error(json.error); }
+  return json;
+}
+
+function login() {
+  const el = $(`<form class="login"><h1 style="margin:0;font-size:18px">Operations console</h1>
+    <input name="name" placeholder="Your name (for the audit log)" required>
+    <input name="token" type="password" placeholder="Admin token" required>
+    <button class="act go" style="padding:8px">Sign in</button></form>`);
+  el.onsubmit = (e) => { e.preventDefault(); token = el.token.value; name = el.name.value;
+    try { sessionStorage.setItem('adminToken', token); sessionStorage.setItem('adminName', name); } catch {}
+    render(); };
+  return el;
+}
+
+const TABS = { overview:'Overview', reports:'Reports', disputes:'Disputes', verifications:'Business badges', other:'Uncategorised', matching:'Matching', audit:'Audit log' };
+const pct = (a, b) => Number(b) ? Math.round((Number(a) / Number(b)) * 100) + '%' : '—';
+const table = (heads, rows) => `<div class="wrap"><table><tr>${heads.map((h) => `<th>${h}</th>`).join('')}</tr>${rows.length ? rows.join('') : `<tr><td colspan="${heads.length}" class="mute">Nothing here.</td></tr>`}</table></div>`;
+
+const views = {
+  async overview(root) {
+    const m = await api('/metrics');
+    const t = m.totals, d = m.delivery, r = m.response;
+    const stat = (v, l) => `<div class="stat"><b>${esc(v)}</b><span>${l}</span></div>`;
+    const step = Object.fromEntries(m.funnel.map((f) => [f.step, f.accounts]));
+    root.innerHTML = `
+      <div class="grid">
+        ${stat(t.accounts, 'Active accounts')}${stat(t.providers, 'Providers with a live skill')}${stat(t.active_capabilities, 'Live skills')}
+        ${stat(t.requests_7d, 'Requests, last 7 days')}${stat(t.no_match_7d, 'Of those, no match')}${stat(t.completed_jobs, 'Completed jobs')}
+        ${stat(t.disputed_jobs, 'Disputed jobs')}${stat(t.open_reports, 'Open reports')}
+      </div>
+      <h2>Request alerts, last 7 days</h2>
+      <div class="grid">
+        ${stat(pct(d.push_delivered, d.push_sent), 'Push delivery rate')}${stat(d.median_delivery_sec == null ? '—' : Math.round(d.median_delivery_sec) + 's', 'Median time to delivered')}
+        ${stat(d.sms_sent, 'SMS fallbacks sent')}${stat('₹' + (Number(d.sms_cost_minor) / 100).toFixed(2), 'SMS cost')}
+        ${stat(d.no_device, 'Alerts with no device to reach')}${stat(pct(r.interested, r.notified), 'Providers who said yes')}${stat(pct(r.lapsed, r.notified), 'Alerts that lapsed')}
+      </div>
+      <h2>Onboarding funnel, last 30 days (accounts)</h2>
+      ${table(['Signed in', 'Described a skill', 'Confirmed a skill', 'Sent an alert', 'Posted a request'],
+        [`<tr><td>${step.otp_done ?? 0}</td><td>${step.first_utterance ?? 0}</td><td>${step.capability_confirmed ?? 0}</td><td>${step.notification_sent ?? 0}</td><td>${step.request_confirmed ?? 0}</td></tr>`])}
+      <h2>AI usage, last 7 days</h2>
+      ${table(['Task', 'Provider', 'Runs', 'Not OK', 'Avg ms', 'Cost (USD)'], m.ai.map((a) => `<tr><td>${esc(a.task)}</td><td>${esc(a.provider)}</td><td>${a.runs}</td><td>${a.not_ok}</td><td>${a.avg_ms}</td><td>${a.cost_usd}</td></tr>`))}
+      <p class="mute">Event queue: ${m.queue.unprocessed} waiting, oldest ${Math.round(m.queue.oldest_sec)}s.</p>`;
+  },
+  async reports(root) {
+    const rows = await api('/reports?state=open');
+    root.innerHTML = table(['When', 'Reason', 'Reporter', 'Reported', 'Detail', 'Actions'], rows.map((r) => `
+      <tr><td>${when(r.created_at)}</td><td>${esc(r.reason)}<br><span class="mute">${esc(r.state)}</span></td>
+      <td>${esc(r.reporter_name || short(r.reporter_id))}</td>
+      <td>${esc(r.subject_name || short(r.subject_account_id))}<br><span class="mute">${r.subject_report_count} report(s) · ${esc(r.subject_status)}</span></td>
+      <td>${esc(r.detail || '')}<div id="chat-${r.id}"></div></td>
+      <td>${r.conversation_id ? `<button class="act" data-read="${r.id}">Read chat</button>` : ''}
+        <button class="act" data-res="${r.id}|dismissed|none">Dismiss</button>
+        <button class="act" data-res="${r.id}|resolved|none">Resolve, no action</button>
+        <button class="act danger" data-res="${r.id}|resolved|suspend">Suspend account</button></td></tr>`));
+    root.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.read) {
+        const msgs = await api(`/reports/${b.dataset.read}/conversation`);
+        document.getElementById('chat-' + b.dataset.read).innerHTML = `<div class="chat">${msgs.map((m) => `<div><span class="mute">${short(m.sender_id)}:</span> ${esc(m.body || '[' + m.kind + ']')} ${m.scam_flag ? '<span class="flag">payment keyword</span>' : ''}</div>`).join('') || 'No messages.'}</div>`;
+      }
+      if (b.dataset.res) {
+        const [id, resolution, action] = b.dataset.res.split('|');
+        if (action === 'suspend' && !confirm('Suspend this account? They will be signed out and no longer matched.')) return;
+        await api(`/reports/${id}/resolve`, { resolution, action }); render();
+      }
+    };
+  },
+  async disputes(root) {
+    const rows = await api('/disputes');
+    root.innerHTML = `<p class="mute">Jobs where one side said it happened and the other said it did not. These count toward nobody's totals.</p>` +
+      table(['Resolved', 'Job', 'Requester', 'Provider'], rows.map((d) => `<tr><td>${when(d.resolved_at)}</td><td>${esc(d.what)}<br><span class="mute">for ${when(d.scheduled_for)}</span></td><td>${esc(d.requester_name || short(d.requester_id))}</td><td>${esc(d.provider_name || short(d.provider_id))}</td></tr>`));
+  },
+  async verifications(root) {
+    const rows = await api('/verifications');
+    root.innerHTML = `<p class="mute">Udyam numbers providers chose to add. Check each on the government portal, then approve. The badge says "Registered business" and nothing stronger.</p>` +
+      table(['Submitted', 'Account', 'Kind', 'Decision'], rows.map((v) => `<tr><td>${when(v.created_at)}</td><td>${esc(v.display_name || short(v.account_id))}</td><td>${esc(v.kind)}</td>
+        <td><button class="act go" data-v="${v.id}|verified">Approve</button><button class="act" data-v="${v.id}|rejected">Reject</button></td></tr>`));
+    root.onclick = async (e) => { const b = e.target.closest('button[data-v]'); if (!b) return; const [id, state] = b.dataset.v.split('|'); await api(`/verifications/${id}`, { state }); render(); };
+  },
+  async other(root) {
+    const rows = await api('/uncategorised');
+    root.innerHTML = `<p class="mute">What people said that fit no category. Review weekly and add categories or keywords for the common ones.</p>` +
+      table(['When', 'Kind', 'Language', 'What they said', 'Status'], rows.map((u) => `<tr><td>${when(u.created_at)}</td><td>${esc(u.purpose)}</td><td>${esc(u.reply_locale)}</td><td>${esc(u.original_text)}</td><td>${esc(u.status)}</td></tr>`));
+  },
+  async matching(root) {
+    const rows = await api('/matching');
+    root.innerHTML = `<p class="mute">The relevance floor decides whether a provider is notified at all. Raise it to cut irrelevant alerts; lower it if good providers are being missed. Change it only after checking against labelled examples.</p>
+      <form id="floor" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <input name="floor" type="number" step="0.01" min="0" max="1" placeholder="New floor (0–1)" required>
+        <input name="note" placeholder="Why (kept in the history)" required style="flex:1;min-width:200px"><button class="act go">Set floor</button></form>` +
+      table(['Version', 'Model', 'Floor', 'Active', 'Note', 'Set'], rows.map((c) => `<tr><td>${c.version}</td><td><code>${esc(c.model_key)}</code></td><td>${c.floor}</td><td>${c.active ? 'yes' : ''}</td><td>${esc(c.note || '')}</td><td>${when(c.created_at)}</td></tr>`));
+    root.querySelector('#floor').onsubmit = async (e) => { e.preventDefault(); await api('/matching/floor', { floor: Number(e.target.floor.value), note: e.target.note.value }); render(); };
+  },
+  async audit(root) {
+    const rows = await api('/audit');
+    root.innerHTML = table(['When', 'Who', 'Action', 'Target'], rows.map((a) => `<tr><td>${when(a.created_at)}</td><td>${esc(a.actor_role)} ${esc(short(a.actor_id))}</td><td>${esc(a.action)}</td><td>${esc(a.target_type || '')} ${esc(short(a.target_id))}</td></tr>`));
+  },
+};
+
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  if (!token) return app.append(login());
+  const head = $(`<header><h1>Operations console</h1><nav>${Object.entries(TABS).map(([k, v]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${v}</button>`).join('')}</nav></header>`);
+  head.onclick = (e) => { const b = e.target.closest('button[data-tab]'); if (b) { tab = b.dataset.tab; render(); } };
+  const main = $('<main><p class="mute">Loading…</p></main>');
+  app.append(head, main);
+  views[tab](main).catch((e) => { if (e.message !== 'unauthorized') main.innerHTML = `<p class="mute">Could not load: ${esc(e.message)}</p>`; });
+}
+render();
+</script>
+</body>
+</html>

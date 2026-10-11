@@ -1,0 +1,25 @@
+name: skill-marketplace
+services:
+  postgres:
+    build:
+      context: ./infra/docker
+      dockerfile: Dockerfile.postgres
+    environment:
+      POSTGRES_USER: sm_owner
+      POSTGRES_PASSWORD: sm_owner_dev
+      POSTGRES_DB: skill_marketplace
+    ports:
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sm_owner -d skill_marketplace"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "56379:6379"
+volumes:
+  pgdata:

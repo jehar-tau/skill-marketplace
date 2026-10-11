@@ -1,0 +1,20 @@
+{
+  "name": "@sm/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.0",
+    "@fastify/websocket": "^11.3.0",
+    "@sm/contracts": "workspace:*",
+    "@sm/core": "workspace:*",
+    "fastify": "^5.12.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": { "@types/node": "^24.0.0", "@types/ws": "^8.5.0", "tsx": "^4.23.0", "typescript": "~5.9.0" }
+}

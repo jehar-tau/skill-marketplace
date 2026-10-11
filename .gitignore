@@ -1,0 +1,13 @@
+node_modules
+.env
+dist
+.expo
+*.log
+.data
+apps/mobile/android
+apps/mobile/ios
+*.apk
+apps/mobile/google-services.json
+*.keystore
+*.jks
+.claude

@@ -1,0 +1,9 @@
+{
+  "name": "@sm/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "tsx watch src/main.ts", "start": "tsx src/main.ts", "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": { "@sm/core": "workspace:*" },
+  "devDependencies": { "@types/node": "^24.0.0", "tsx": "^4.23.0", "typescript": "~5.9.0" }
+}

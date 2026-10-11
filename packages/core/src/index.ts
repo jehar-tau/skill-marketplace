@@ -1,0 +1,17 @@
+export { config, ROOT } from './config';
+export { AppError } from './errors';
+export { asActor, asSystem, closePools, ownerPool } from './db';
+export { redis, publish, subscribe, presenceKey, rateLimit } from './redis';
+export { migrate } from './migrate';
+export { startWorker, drainOutbox } from './relay';
+export { asrAvailable } from './ai/gateway';
+export * as identity from './modules/identity';
+export * as intake from './modules/intake';
+export * as matching from './modules/matching';
+export * as conversations from './modules/conversations';
+export * as trust from './modules/trust';
+export * as safety from './modules/safety';
+export * as media from './modules/media';
+export * as admin from './modules/admin';
+export * as notifications from './modules/notifications';
+export type { Actor } from './modules/identity';

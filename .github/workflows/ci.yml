@@ -1,0 +1,43 @@
+name: CI
+
+# Runs on every pull request and on every push to the three long-lived branches.
+on:
+  pull_request:
+  push:
+    branches: [dev, staging, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Same PostgreSQL (PostGIS + pgvector) and Redis that developers run locally.
+      - name: Start database and Redis
+        run: docker compose up -d --build --wait
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Type-check everything
+        run: pnpm typecheck
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      - name: Backend tests
+        run: pnpm test
+
+      - name: Language accuracy (built-in rules)
+        run: pnpm eval rules
