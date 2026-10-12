@@ -11,3 +11,4 @@ apps/mobile/google-services.json
 *.keystore
 *.jks
 .claude
+.staging-values.txt
