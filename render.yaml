@@ -58,13 +58,11 @@ services:
       - { key: AI_ASR_MODEL, value: whisper-large-v3 }
       - { key: AI_ASR_API_KEY, sync: false }
 
-      # --- Chat photos (Supabase Storage, S3-compatible)
-      - { key: MEDIA_STORAGE, value: s3 }
-      - { key: S3_BUCKET, value: chat-media }
-      - { key: S3_REGION, sync: false }
-      - { key: S3_ENDPOINT, sync: false }
-      - { key: AWS_ACCESS_KEY_ID, sync: false }
-      - { key: AWS_SECRET_ACCESS_KEY, sync: false }
+      # --- Chat photos. "local" keeps them on the server's own disk, which a free
+      # instance wipes whenever it restarts: fine for a first test. For photos that
+      # last, set MEDIA_STORAGE=s3 and add S3_BUCKET, S3_REGION, S3_ENDPOINT,
+      # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (SETUP.md, Step 7b).
+      - { key: MEDIA_STORAGE, value: local }
 
   - type: keyvalue
     name: skill-marketplace-staging-redis

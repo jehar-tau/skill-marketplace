@@ -188,7 +188,9 @@ Neither asks for a card on the free plan, as far as I could find.
 3. Make up a second password for the app's own restricted login (letters and digits only). Your **app address** is the same string with `postgres.` changed to `sm_app.` and this second password:
    `postgresql://sm_app.abcdefgh:SECONDPASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`
 
-### 7b. Supabase: photo storage
+### 7b. Supabase: photo storage (optional, can be done later)
+The blueprint starts with photos kept on the server's own disk, which a free server wipes when it restarts. Do this step when you want chat photos to last, then add the settings named in `render.yaml` to the service's Environment tab.
+
 1. In the project open **Storage → New bucket**, name it `chat-media`, and leave it **private**.
 2. Open **Storage → Settings → S3 Connection**, turn it on, and click **New access key**. Note the **endpoint**, **region**, **access key ID** and **secret access key**.
 
@@ -207,7 +209,6 @@ Neither asks for a card on the free plan, as far as I could find.
    | `SUPPORT_EMAIL` | an inbox you read |
    | `AI_LLM_API_KEY`, `AI_EMBED_API_KEY` | your Gemini key (ideally a fresh one) |
    | `AI_ASR_API_KEY` | your Groq key (ideally a fresh one) |
-   | `S3_ENDPOINT`, `S3_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | from 7b |
 
 4. Click **Apply**. The first build takes several minutes. Render shows the address, like `https://skill-marketplace-staging.onrender.com`.
 
