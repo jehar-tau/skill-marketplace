@@ -5,7 +5,7 @@ import {
   JobAnswerBody, MatchRespondBody, MediaUploadBody, OtpStartBody, OtpVerifyBody, ProviderSettingsBody, RatingBody, ReceiptBody,
   RefreshBody, ReportBody, SendMessageBody, UpdateMeBody, VerificationBody,
 } from '@sm/contracts';
-import { asrAvailable, config, conversations, identity, intake, matching, media, safety, trust, vapidKeys } from '@sm/core';
+import { asrAvailable, config, conversations, identity, intake, matching, media, profile, safety, trust, vapidKeys } from '@sm/core';
 import { requireAuth } from './server';
 
 const IdParams = z.object({ id: z.string().uuid() });
@@ -34,7 +34,7 @@ export function registerRoutes(app: FastifyInstance) {
     r.post('/v1/auth/logout', async (req) => (await identity.logout(req.actor), { ok: true }));
     r.get('/v1/me', async (req) => identity.getMe(req.actor));
     r.patch('/v1/me', async (req) =>
-      identity.updateMe(req.actor, UpdateMeBody.extend({ defaultView: z.enum(['find', 'offer']).optional() }).parse(req.body)),
+      identity.updateMe(req.actor, UpdateMeBody.extend({ defaultView: z.enum(['find', 'offer']).optional(), aiLearning: z.boolean().optional() }).parse(req.body)),
     );
     r.patch('/v1/me/device', async (req) => (await identity.updateDevice(req.actor, DeviceBody.parse(req.body)), { ok: true }));
     r.patch('/v1/me/provider-settings', async (req) => {
@@ -63,6 +63,10 @@ export function registerRoutes(app: FastifyInstance) {
       return intake.addProof(req.actor, id(req), b);
     });
     r.delete('/v1/proofs/:id', async (req) => (await intake.removeProof(req.actor, id(req)), { ok: true }));
+    // ---- what the AI has learned about this person's work (private to them)
+    r.get('/v1/profile/insights', async (req) => profile.listInsights(req.actor));
+    r.delete('/v1/profile/insights/:id', async (req) => (await profile.removeInsight(req.actor, id(req)), { ok: true }));
+
     r.get('/v1/provider/area', async (req) => ({ area: await intake.getServiceArea(req.actor) }));
     r.patch('/v1/provider/area', async (req) => {
       const b = z.object({

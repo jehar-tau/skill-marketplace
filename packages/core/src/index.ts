@@ -14,5 +14,6 @@ export * as safety from './modules/safety';
 export * as media from './modules/media';
 export * as admin from './modules/admin';
 export * as notifications from './modules/notifications';
+export * as profile from './modules/profile';
 export type { Actor } from './modules/identity';
 export { vapidKeys } from './modules/providers';

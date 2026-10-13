@@ -9,7 +9,9 @@ import { asSystem, ownerPool } from './db';
 import { closeWaveIfAllDeclined, dispatchRequest, expireWave, matchNewCapability } from './modules/matching';
 import { processImage, purgeExpiredAudio } from './modules/media';
 import { notifyAgreement, notifyInterested, notifyMessage, notifyWave, smsFallbackDelay, smsFallback } from './modules/notifications';
+import { learnFromConversation, learnFromProofPhoto } from './modules/profile';
 import { sweepTrust } from './modules/trust';
+import { learningAvailable } from './ai/learn';
 
 let boss: PgBoss | null = null;
 
@@ -49,6 +51,16 @@ async function route(e: { event_type: string; aggregate_id: string; payload: Rec
       break;
     case 'agreement.confirmed':
       await send(JOBS.jobPrompt, { conversationId: e.payload.conversationId, kind: 'agreement' });
+      if (learningAvailable()) await send(JOBS.learnChat, { conversationId: e.payload.conversationId }, { startAfter: 20 });
+      break;
+    case 'job.resolved':
+      // The chat usually has more in it by the time the job is done.
+      if (learningAvailable() && e.payload.result === 'completed' && e.payload.conversationId) {
+        await send(JOBS.learnChat, { conversationId: e.payload.conversationId }, { startAfter: 20 });
+      }
+      break;
+    case 'proof.added':
+      if (learningAvailable()) await send(JOBS.learnPhoto, { assetId: e.aggregate_id }, { startAfter: 6 });
       break;
     default:
       break;
@@ -132,6 +144,8 @@ export async function startWorker() {
       if (c) await notifyAgreement(d.conversationId, [c.requester_id, c.provider_id], d.kind);
     }),
   );
+  await b.work(JOBS.learnChat, one<{ conversationId: string }>((d) => learnFromConversation(d.conversationId)));
+  await b.work(JOBS.learnPhoto, one<{ assetId: string }>((d) => learnFromProofPhoto(d.assetId)));
   await b.work(JOBS.maintenance, one(() => maintenance()));
   await b.schedule(JOBS.maintenance, '*/2 * * * *');
 
