@@ -68,7 +68,9 @@ const Env = z.object({
   AI_LLM_TIMEOUT_MS: z.coerce.number().default(15000),
   AI_LLM_PRICE_IN: z.coerce.number().default(0),
   AI_LLM_PRICE_OUT: z.coerce.number().default(0),
-  AI_EMBEDDER: z.enum(['local', 'openai_compat']).default('local'),
+  AI_EMBEDDER: z.enum(['local', 'minilm', 'openai_compat']).default('local'),
+  // Profile learning: auto (the hosted model if one is set, otherwise built-in rules) | rules | off
+  AI_LEARNER: z.enum(['auto', 'rules', 'off']).default('auto'),
   AI_EMBED_BASE_URL: optional,
   AI_EMBED_API_KEY: optional,
   AI_EMBED_MODEL: optional,

@@ -91,7 +91,7 @@ export const CATEGORIES: CategoryDef[] = [
   c('home.carpentry', 'in_home', ['Carpenter', 'बढ़ई', 'सुतार'],
     ['carpenter', 'सुतार', 'बढ़ई', 'furniture', 'फर्निचर', 'फर्नीचर', 'door repair', 'wardrobe', 'cupboard', 'कपाट', 'wood work']),
   c('home.painting', 'in_home', ['House painting', 'घर की पुताई', 'घराचे रंगकाम'],
-    ['house painting', 'wall painting', 'painter', 'रंगकाम', 'रंगारी', 'पुताई', 'whitewash', 'waterproofing']),
+    ['house painting', 'wall painting', 'painter', 'paint my', 'paint the', 'paint our', 'room painting', 'flat painting', 'repaint', 'रंगकाम', 'रंगारी', 'पुताई', 'whitewash', 'waterproofing']),
   c('home.appliance_repair', 'in_home', ['Appliance repair', 'उपकरण मरम्मत', 'उपकरण दुरुस्ती'],
     ['ac repair', 'ac service', 'ac', 'एसी', 'fridge', 'फ्रिज', 'refrigerator', 'washing machine', 'वॉशिंग मशीन', 'microwave', 'tv repair',
      'टीव्ही', 'टीवी', 'mixer repair', 'geyser repair', 'ro service', 'water purifier', 'दुरुस्ती', 'मरम्मत']),

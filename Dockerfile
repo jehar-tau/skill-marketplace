@@ -32,6 +32,8 @@ COPY packages packages
 COPY apps/api apps/api
 COPY apps/worker apps/worker
 COPY --from=web /app/apps/mobile/dist apps/mobile/dist
+# The server writes here at run time: the small matching model on first use, and photos when storage is local.
+RUN mkdir -p /app/.data && chown -R node:node /app/.data
 ENV NODE_ENV=production PORT=4000 INLINE_WORKER=false
 EXPOSE 4000
 USER node

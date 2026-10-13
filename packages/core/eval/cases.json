@@ -22,5 +22,6 @@
   {"purpose":"capability","text":"योगा शिकवतो, सकाळच्या बॅच, ऑनलाइन पण","locale":"mr","categories":["personal.fitness"],"count":1,"attrs":{}},
   {"purpose":"capability","text":"Tiffin service, veg only, monthly 3000 rupees","locale":"en","categories":["food.tiffin_service"],"count":1,"attrs":{"diet":"veg","price_amount":3000}},
   {"purpose":"capability","text":"गाडी चालवायला शिकवतो","locale":"mr","categories":["transport.driving_lessons"],"count":1,"attrs":{}},
-  {"purpose":"capability","text":"शिवणकाम करते, ब्लाउज आणि फॉल पिको","locale":"mr","categories":["personal.tailoring"],"count":1,"attrs":{}}
+  {"purpose":"capability","text":"शिवणकाम करते, ब्लाउज आणि फॉल पिको","locale":"mr","categories":["personal.tailoring"],"count":1,"attrs":{}},
+  {"purpose":"request","text":"Need someone to paint my 2 bedroom flat","locale":"en","categories":["home.painting"],"attrs":{}}
 ]

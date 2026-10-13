@@ -1,14 +1,15 @@
 // The private, AI-assisted profile: what has been learned about a person's work
 // from their own chats and photos. Only its owner can see or change it.
 
-import { describePhoto, extractFromChat, LEARN_VERSION, learningAvailable, writeSummary, type ChatExtractor } from '../ai/learn';
+import { describePhoto, extractFromChat, hostedLearning, LEARN_VERSION, learningAvailable, writeSummary, type ChatExtractor } from '../ai/learn';
+import { extractWithRules } from '../ai/learnRules';
 import { config } from '../config';
 import { asActor, asSystem, type Tx } from '../db';
 import { notFound } from '../errors';
 import type { Actor } from './identity';
 import { readObject } from './media';
 
-const MODEL = () => `${config.AI_INTERPRETER}:${config.AI_LLM_MODEL}:${LEARN_VERSION}`;
+const MODEL = () => (hostedLearning() ? `${config.AI_INTERPRETER}:${config.AI_LLM_MODEL}:${LEARN_VERSION}` : `rules:${LEARN_VERSION}`);
 const MAX_PER_TALENT = 30;
 
 async function storeFacts(tx: Tx, accountId: string, capabilityId: string, facts: { kind: string; text: string }[], source: 'chat' | 'photo', sourceId: string) {
@@ -36,7 +37,8 @@ async function storeFacts(tx: Tx, accountId: string, capabilityId: string, facts
 }
 
 async function refreshSummary(capabilityId: string) {
-  if (!learningAvailable()) return;
+  // The blurb needs a model that can write; the rules-only mode shows the facts without one.
+  if (!hostedLearning()) return;
   const data = await asSystem(async (tx) => {
     const cap = await tx.maybeOne(
       `SELECT c.account_id, cv.original_text, cv.canonical_en FROM capabilities c JOIN capability_versions cv ON cv.id = c.current_version_id WHERE c.id = $1 AND c.status <> 'removed'`,
@@ -60,7 +62,7 @@ async function refreshSummary(capabilityId: string) {
 // Reads one conversation and adds what it shows about the provider's work to the
 // provider's private profile. Runs after an agreement is confirmed and again when
 // the job is completed.
-export async function learnFromConversation(conversationId: string, extract: ChatExtractor = extractFromChat): Promise<{ added: number; skipped?: string }> {
+export async function learnFromConversation(conversationId: string, extract: ChatExtractor = hostedLearning() ? extractFromChat : extractWithRules): Promise<{ added: number; skipped?: string }> {
   const chat = await asSystem(async (tx) => {
     const c = await tx.maybeOne(
       `SELECT c.id, c.provider_id, c.requester_id, c.capability_id, cv.original_text, cv.canonical_en,
@@ -84,6 +86,7 @@ export async function learnFromConversation(conversationId: string, extract: Cha
     );
     return { c, msgs: msgs.reverse(), agreed };
   });
+  if (!learningAvailable()) return { added: 0, skipped: 'off' };
   if ('skip' in chat) return { added: 0, skipped: chat.skip };
   if (chat.msgs.length < 3) return { added: 0, skipped: 'too_short' };
 
@@ -99,6 +102,8 @@ export async function learnFromConversation(conversationId: string, extract: Cha
 
 // Looks at one work photo a person added to a talent and notes what it shows.
 export async function learnFromProofPhoto(assetId: string): Promise<{ added: number; skipped?: string }> {
+  // Looking at a photo needs a hosted model; without one, photos are simply stored.
+  if (!hostedLearning()) return { added: 0, skipped: 'no_model' };
   const row = await asSystem((tx) =>
     tx.maybeOne(
       `SELECT p.capability_id, p.account_id, m.object_key, m.scan_state, a.ai_learning, cv.original_text, cv.canonical_en
