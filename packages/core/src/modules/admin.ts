@@ -43,7 +43,8 @@ export async function metrics() {
        FROM ai_runs WHERE created_at > now() - interval '7 days' GROUP BY task, provider ORDER BY task`,
     );
     const queue = await tx.one(`SELECT count(*) AS unprocessed, COALESCE(extract(epoch FROM now() - min(created_at)), 0) AS oldest_sec FROM outbox_events WHERE processed_at IS NULL`);
-    return { totals, funnel, delivery, response, ai, queue };
+    const errors = await tx.one(`SELECT count(*) AS last_24h FROM server_errors WHERE created_at > now() - interval '24 hours'`);
+    return { totals, funnel, delivery, response, ai, queue, errors };
   });
 }
 
@@ -188,4 +189,21 @@ export async function setMatchingFloor(adminId: string, floor: number, note: str
 
 export async function recentAudit() {
   return asSystem((tx) => tx.query(`SELECT actor_id, actor_role, action, target_type, target_id, created_at FROM audit_events ORDER BY created_at DESC LIMIT 200`));
+}
+
+// Recorded by the API whenever a request fails unexpectedly.
+export async function recordServerError(method: string, route: string, message: string) {
+  await asSystem(async (tx) => {
+    await tx.exec(`INSERT INTO server_errors(method, route, message) VALUES ($1, $2, $3)`, [method, route.slice(0, 200), message.slice(0, 500)]);
+    await tx.exec(`DELETE FROM server_errors WHERE created_at < now() - interval '30 days'`);
+  }).catch(() => undefined);
+}
+
+export async function recentServerErrors() {
+  return asSystem((tx) =>
+    tx.query(
+      `SELECT method, route, message, count(*) AS times, max(created_at) AS last_seen FROM server_errors
+       WHERE created_at > now() - interval '7 days' GROUP BY method, route, message ORDER BY max(created_at) DESC LIMIT 100`,
+    ),
+  );
 }

@@ -15,7 +15,7 @@ export default function Settings() {
   const th = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { t, me, setMe, locale, setLocale, signOut, signedIn, ready, role, setRole } = useApp();
+  const { t, me, setMe, locale, setLocale, signOut, signedIn, ready, role } = useApp();
   const [name, setName] = useState(me?.displayName ?? '');
   const [udyam, setUdyam] = useState('');
   const blocks = useLive<{ accountId: string; displayName: string | null }[]>(() => api('/v1/blocks'), [], []);
@@ -94,7 +94,6 @@ export default function Settings() {
             </Card>
           ) : null}
 
-          <Btn kind="soft" label={role === 'offer' ? t.switchToFind : t.switchToOffer} onPress={async () => { await setRole(role === 'offer' ? 'find' : 'offer'); router.replace('/'); }} />
           <Btn kind="plain" label={t.signOut} onPress={signOut} />
           <Btn kind="danger" label={t.deleteAccount} onPress={() => confirmAsk(t.deleteConfirm, t.delete, t.cancel, async () => { await api('/v1/me', { method: 'DELETE' }).catch(() => undefined); await signOut(); })} />
         </ScrollView>

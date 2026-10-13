@@ -148,6 +148,8 @@ function capabilityView(r: Record<string, any>) {
     attributes: r.attributes as Attributes,
     serviceRadiusM: r.service_radius_m as number,
     trust: trustLine({ ...r, verified: r.verified }),
+    proofLinks: Number(r.proof_links ?? 0),
+    proofPhotos: Number(r.proof_photos ?? 0),
     createdAt: r.created_at as Date,
   };
 }
@@ -170,6 +172,8 @@ export async function listCapabilities(actor: Actor) {
       `SELECT c.*, cv.original_text, cv.canonical_en, cv.attributes, cv.source_locale, sc.labels,
               (SELECT preferred_locale FROM accounts WHERE id = c.account_id) AS preferred_locale,
               ct.completed_jobs, ct.rating_avg, ct.rating_count,
+              (SELECT count(*) FROM capability_proofs p WHERE p.capability_id = c.id AND p.kind = 'link') AS proof_links,
+              (SELECT count(*) FROM capability_proofs p WHERE p.capability_id = c.id AND p.kind = 'photo') AS proof_photos,
               EXISTS (SELECT 1 FROM verifications v WHERE v.account_id = c.account_id AND v.kind = 'udyam' AND v.state = 'verified') AS verified
        FROM capabilities c JOIN capability_versions cv ON cv.id = c.current_version_id
        JOIN service_categories sc ON sc.id = c.category_id LEFT JOIN capability_trust ct ON ct.capability_id = c.id
@@ -301,4 +305,69 @@ export async function setServiceArea(actor: Actor, body: { serviceRadiusM?: numb
     for (const c of caps) await emit(tx, 'capability.activated', 'capability', c.id, {}, c.cell_id);
   });
   return getServiceArea(actor);
+}
+
+// ---------------------------------------------------------------- proof of work
+// Optional. A provider can add links and photos to a talent whenever they like.
+
+const MAX_PROOFS = 12;
+
+// Accepts a full address, a bare domain, or an Instagram handle like "@name".
+export function normaliseProofLink(raw: string): string | null {
+  let v = raw.trim();
+  if (!v || v.length > 300 || /\s/.test(v)) return null;
+  if (/^@[A-Za-z0-9._]{1,30}$/.test(v)) v = `https://instagram.com/${v.slice(1)}`;
+  else if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+  try {
+    const u = new URL(v);
+    if (!['http:', 'https:'].includes(u.protocol) || !u.hostname.includes('.')) return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function ownCapability(tx: Tx, actor: Actor, capabilityId: string) {
+  const cap = await tx.maybeOne(`SELECT id FROM capabilities WHERE id = $1 AND account_id = $2 AND status <> 'removed'`, [capabilityId, actor.accountId]);
+  if (!cap) throw notFound('capability_not_found');
+}
+
+export async function listProofs(actor: Actor, capabilityId: string) {
+  return asActor(actor.accountId, async (tx) => {
+    await ownCapability(tx, actor, capabilityId);
+    const rows = await tx.query(`SELECT id, kind, url, media_asset_id, created_at FROM capability_proofs WHERE capability_id = $1 ORDER BY created_at`, [capabilityId]);
+    return rows.map((r) => ({ id: r.id as string, kind: r.kind as 'link' | 'photo', url: r.url as string | null, mediaAssetId: r.media_asset_id as string | null }));
+  });
+}
+
+export async function addProof(actor: Actor, capabilityId: string, body: { link?: string; mediaAssetId?: string }) {
+  await asActor(actor.accountId, async (tx) => {
+    await ownCapability(tx, actor, capabilityId);
+    const n = await tx.one(`SELECT count(*) AS n FROM capability_proofs WHERE capability_id = $1`, [capabilityId]);
+    if (Number(n.n) >= MAX_PROOFS) throw badRequest('too_many_proofs');
+    if (body.link !== undefined) {
+      const url = normaliseProofLink(body.link);
+      if (!url) throw badRequest('bad_link');
+      await tx.exec(`INSERT INTO capability_proofs(capability_id, account_id, kind, url) VALUES ($1, $2, 'link', $3)`, [capabilityId, actor.accountId, url]);
+    } else if (body.mediaAssetId) {
+      const asset = await tx.maybeOne(`SELECT id FROM media_assets WHERE id = $1 AND owner_id = $2 AND kind = 'image' AND conversation_id IS NULL`, [
+        body.mediaAssetId, actor.accountId,
+      ]);
+      if (!asset) throw badRequest('media_not_found');
+      await tx.exec(`INSERT INTO capability_proofs(capability_id, account_id, kind, media_asset_id) VALUES ($1, $2, 'photo', $3)`, [
+        capabilityId, actor.accountId, body.mediaAssetId,
+      ]);
+    } else {
+      throw badRequest('empty_proof');
+    }
+  });
+  return listProofs(actor, capabilityId);
+}
+
+export async function removeProof(actor: Actor, proofId: string) {
+  await asActor(actor.accountId, async (tx) => {
+    const p = await tx.maybeOne(`DELETE FROM capability_proofs WHERE id = $1 AND account_id = $2 RETURNING media_asset_id`, [proofId, actor.accountId]);
+    if (!p) throw notFound('proof_not_found');
+    if (p.media_asset_id) await tx.exec(`UPDATE media_assets SET scan_state = 'rejected' WHERE id = $1 AND owner_id = $2`, [p.media_asset_id, actor.accountId]);
+  });
 }
