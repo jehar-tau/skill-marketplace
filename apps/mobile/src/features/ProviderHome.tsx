@@ -57,6 +57,17 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
   const count = services.data?.length ?? null;
   const hasService = (count ?? 0) > 0;
 
+  // A talent tapped on the welcome screen is waiting in the box when they arrive.
+  useEffect(() => {
+    if (count !== 0) return;
+    getItem('picked_talent').then((picked) => {
+      if (!picked) return;
+      void setItem('picked_talent', null);
+      onEdit({ id: '', text: picked });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [count]);
+
   useEffect(() => {
     if (!hasService) return;
     // The first time a service goes live, say clearly what happens next.

@@ -213,6 +213,12 @@ const en = {
   ] as [string, string, string][],
   tryOne: 'Or tap one to start:',
   starters: ['I cook biryani and take weekend orders', 'I teach maths and science up to class 10', 'I build websites for small shops'],
+  moreIdeasLead: 'These are only a few.',
+  moreIdeasLink: (n: number) => `See ${n}+ things people earn from`,
+  ideasTitle: 'What could you earn from?',
+  ideasSub: 'Tap anything you can do. Not on the list? You can describe your own after you join.',
+  ideasSearch: 'Search',
+  ideasNone: 'Nothing matches, and that is fine. Join and describe it in your own words.',
 };
 
 type Dict = typeof en;
@@ -430,6 +436,12 @@ const hi: Dict = {
   ] as [string, string, string][],
   tryOne: 'या शुरू करने के लिए एक चुनें:',
   starters: ['मैं बिरयानी बनाता हूँ और छुट्टी के दिन ऑर्डर लेता हूँ', 'मैं दसवीं तक गणित और विज्ञान पढ़ाता हूँ', 'मैं छोटी दुकानों के लिए वेबसाइट बनाता हूँ'],
+  moreIdeasLead: 'ये तो बस कुछ उदाहरण हैं.',
+  moreIdeasLink: (n: number) => `ऐसे ${n}+ काम देखें जिनसे लोग कमाते हैं`,
+  ideasTitle: 'आप किससे कमा सकते हैं?',
+  ideasSub: 'जो आप कर सकते हैं उस पर टैप करें. सूची में नहीं है? जुड़ने के बाद अपने शब्दों में बता सकते हैं.',
+  ideasSearch: 'खोजें',
+  ideasNone: 'कुछ नहीं मिला, कोई बात नहीं. जुड़िए और अपने शब्दों में बताइए.',
 };
 
 const mr: Dict = {
@@ -645,6 +657,12 @@ const mr: Dict = {
   ] as [string, string, string][],
   tryOne: 'किंवा सुरू करण्यासाठी एक निवडा:',
   starters: ['मी बिर्याणी बनवतो आणि सुट्टीच्या दिवशी ऑर्डर घेतो', 'मी दहावीपर्यंत गणित आणि विज्ञान शिकवतो', 'मी छोट्या दुकानांसाठी वेबसाइट बनवतो'],
+  moreIdeasLead: 'ही फक्त काही उदाहरणे आहेत.',
+  moreIdeasLink: (n: number) => `लोक ज्यातून कमावतात अशी ${n}+ कामे पाहा`,
+  ideasTitle: 'तुम्ही कशातून कमवू शकता?',
+  ideasSub: 'तुम्हाला जे येते त्यावर टॅप करा. यादीत नाही? सामील झाल्यावर तुमच्या शब्दांत सांगू शकता.',
+  ideasSearch: 'शोधा',
+  ideasNone: 'काही जुळले नाही, हरकत नाही. सामील व्हा आणि तुमच्या शब्दांत सांगा.',
 };
 
 export const STRINGS: Record<Locale, Dict> = { en, hi, mr };

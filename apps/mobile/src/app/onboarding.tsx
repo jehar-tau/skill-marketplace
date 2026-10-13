@@ -6,37 +6,42 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, getDeviceId, platform, saveServerAddress } from '../lib/api';
 import { apiUrl } from '../lib/config';
 import { LOCALE_NAMES, type Locale } from '../lib/i18n';
+import { setItem } from '../lib/storage';
+import { TALENT_COUNT, TALENT_GROUPS } from '../lib/talents';
 import { useTheme } from '../lib/theme';
 import { useApp } from '../state';
-import { Btn, errorText, Field, Notice, Txt } from '../ui';
+import { Btn, Chip, errorText, Field, Notice, Sheet, Txt } from '../ui';
 
 // A slow carousel of everyday talents, so people recognise themselves in one.
-function Ideas({ width }: { width: number }) {
+function Ideas({ width: guess }: { width: number }) {
   const th = useTheme();
+  // Measured, not guessed: the first window size a browser reports can be wrong.
+  const [measured, setMeasured] = useState(0);
+  const width = measured || guess;
   const { t } = useApp();
   const [index, setIndex] = useState(0);
   const ref = useRef<ScrollView>(null);
   const touched = useRef(false);
 
+  const current = useRef(0);
   useEffect(() => {
     const timer = setInterval(() => {
       if (touched.current) return;
-      setIndex((i) => {
-        const next = (i + 1) % t.ideas.length;
-        ref.current?.scrollTo({ x: next * width, animated: true });
-        return next;
-      });
+      current.current = (current.current + 1) % t.ideas.length;
+      // Not animated: smooth scrolling fights with snap-to-card in some browsers and leaves the card behind.
+      ref.current?.scrollTo({ x: current.current * width, animated: false });
+      setIndex(current.current);
     }, 3500);
     return () => clearInterval(timer);
   }, [t.ideas.length, width]);
 
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 10 }} onLayout={(e) => setMeasured(Math.floor(e.nativeEvent.layout.width))}>
       <ScrollView ref={ref} horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ width }}
         onScrollBeginDrag={() => (touched.current = true)}
-        onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}>
+        onMomentumScrollEnd={(e) => { current.current = Math.round(e.nativeEvent.contentOffset.x / width); setIndex(current.current); }}>
         {t.ideas.map(([icon, title, line]) => (
-          <View key={title} style={{ width, paddingRight: 2 }}>
+          <View key={title} style={{ width }}>
             <View style={{ backgroundColor: th.accentSoft, borderRadius: 20, padding: 22, gap: 8, minHeight: 170, justifyContent: 'center' }}>
               <Txt size={40}>{icon}</Txt>
               <Txt size={21} weight="700">{title}</Txt>
@@ -69,6 +74,8 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [taps, setTaps] = useState(0);
   const [server, setServer] = useState(apiUrl());
+  const [ideasOpen, setIdeasOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   if (signedIn) return <Redirect href="/" />;
   const digits = phone.replace(/\D/g, '');
@@ -129,6 +136,11 @@ export default function Onboarding() {
                 <Txt size={17} mute>{t.heroSub}</Txt>
               </View>
               <Ideas width={width} />
+              <Pressable accessibilityRole="button" onPress={() => setIdeasOpen(true)} style={{ minHeight: 44, justifyContent: 'center' }}>
+                <Txt size={15} mute style={{ textAlign: 'center' }}>
+                  {t.moreIdeasLead} <Txt size={15} weight="700" color={th.accent} style={{ textDecorationLine: 'underline' }}>{t.moreIdeasLink(Math.floor(TALENT_COUNT / 50) * 50)}</Txt>
+                </Txt>
+              </Pressable>
             </View>
             {taps >= 5 ? (
               <View style={{ gap: 8 }}>
@@ -168,6 +180,26 @@ export default function Onboarding() {
           </View>
         )}
       </ScrollView>
+      <Sheet visible={ideasOpen} onClose={() => setIdeasOpen(false)} title={t.ideasTitle}>
+        <Txt size={15} mute>{t.ideasSub}</Txt>
+        <Field value={search} onChangeText={setSearch} placeholder={t.ideasSearch} autoCorrect={false} />
+        {(() => {
+          const q = search.trim().toLowerCase();
+          const groups = TALENT_GROUPS.map((g) => ({ ...g, items: q ? g.items.filter((i) => i.toLowerCase().includes(q)) : g.items })).filter((g) => g.items.length > 0);
+          if (groups.length === 0) return <Txt mute>{t.ideasNone}</Txt>;
+          return groups.map((g) => (
+            <View key={g.title.en} style={{ gap: 8 }}>
+              <Txt size={16} weight="700">{g.icon} {g.title[locale]}</Txt>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {g.items.map((item) => (
+                  // Picking one carries it into the first question after sign-in.
+                  <Chip key={item} label={item} onPress={async () => { await setItem('picked_talent', item); setIdeasOpen(false); setStep('phone'); }} />
+                ))}
+              </View>
+            </View>
+          ));
+        })()}
+      </Sheet>
     </KeyboardAvoidingView>
   );
 }
