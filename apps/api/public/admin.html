@@ -71,7 +71,7 @@ function login() {
   return el;
 }
 
-const TABS = { overview:'Overview', reports:'Reports', disputes:'Disputes', verifications:'Business badges', other:'Uncategorised', matching:'Matching', audit:'Audit log' };
+const TABS = { overview:'Overview', reports:'Reports', disputes:'Disputes', verifications:'Business badges', other:'Uncategorised', matching:'Matching', errors:'Errors', audit:'Audit log' };
 const pct = (a, b) => Number(b) ? Math.round((Number(a) / Number(b)) * 100) + '%' : '—';
 const table = (heads, rows) => `<div class="wrap"><table><tr>${heads.map((h) => `<th>${h}</th>`).join('')}</tr>${rows.length ? rows.join('') : `<tr><td colspan="${heads.length}" class="mute">Nothing here.</td></tr>`}</table></div>`;
 
@@ -85,7 +85,7 @@ const views = {
       <div class="grid">
         ${stat(t.accounts, 'Active accounts')}${stat(t.providers, 'Providers with a live skill')}${stat(t.active_capabilities, 'Live skills')}
         ${stat(t.requests_7d, 'Requests, last 7 days')}${stat(t.no_match_7d, 'Of those, no match')}${stat(t.completed_jobs, 'Completed jobs')}
-        ${stat(t.disputed_jobs, 'Disputed jobs')}${stat(t.open_reports, 'Open reports')}
+        ${stat(t.disputed_jobs, 'Disputed jobs')}${stat(t.open_reports, 'Open reports')}${stat(m.errors.last_24h, 'Server errors, last 24 hours')}
       </div>
       <h2>Request alerts, last 7 days</h2>
       <div class="grid">
@@ -149,6 +149,11 @@ const views = {
         <input name="note" placeholder="Why (kept in the history)" required style="flex:1;min-width:200px"><button class="act go">Set floor</button></form>` +
       table(['Version', 'Model', 'Floor', 'Active', 'Note', 'Set'], rows.map((c) => `<tr><td>${c.version}</td><td><code>${esc(c.model_key)}</code></td><td>${c.floor}</td><td>${c.active ? 'yes' : ''}</td><td>${esc(c.note || '')}</td><td>${when(c.created_at)}</td></tr>`));
     root.querySelector('#floor').onsubmit = async (e) => { e.preventDefault(); await api('/matching/floor', { floor: Number(e.target.floor.value), note: e.target.note.value }); render(); };
+  },
+  async errors(root) {
+    const rows = await api('/errors');
+    root.innerHTML = `<p class="mute">Requests that failed unexpectedly in the last 7 days, grouped. An empty list is the goal.</p>` +
+      table(['Last seen', 'Times', 'Where', 'What went wrong'], rows.map((e) => `<tr><td>${when(e.last_seen)}</td><td>${e.times}</td><td><code>${esc(e.method)} ${esc(e.route)}</code></td><td>${esc(e.message)}</td></tr>`));
   },
   async audit(root) {
     const rows = await api('/audit');

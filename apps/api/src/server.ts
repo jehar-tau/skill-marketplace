@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { AppError, closePools, config, ROOT, identity, presenceKey, rateLimit, redis, startWorker, subscribe, type Actor } from '@sm/core';
+import { admin, AppError, closePools, config, ROOT, identity, presenceKey, rateLimit, redis, startWorker, subscribe, type Actor } from '@sm/core';
 import { registerAdminRoutes } from './admin';
 import { registerLegalRoutes } from './legal';
 import { registerRoutes } from './routes';
@@ -37,6 +37,8 @@ app.setErrorHandler((err, _req, reply) => {
   const status = (err as { statusCode?: number }).statusCode;
   if (status && status < 500) return reply.status(status).send({ error: 'bad_request', message: (err as Error).message });
   app.log.error(err);
+  // The route pattern, not the address, so ids never end up in the error list.
+  void admin.recordServerError(_req.method, _req.routeOptions?.url ?? 'unknown', (err as Error).message ?? 'error');
   return reply.status(500).send({ error: 'internal_error' });
 });
 
