@@ -129,8 +129,18 @@ app.get('/v1/ws', { websocket: true }, (socket) => {
 // address as the API, so one URL is everything a tester needs.
 const webDir = join(ROOT, 'apps/mobile/dist');
 if (existsSync(join(webDir, 'index.html'))) {
-  await app.register(fastifyStatic, { root: webDir, wildcard: false, maxAge: '1h' });
+  await app.register(fastifyStatic, {
+    root: webDir,
+    wildcard: false,
+    // The page itself is served below, never from a cache, so a new build shows up at once.
+    index: false,
+    setHeaders(res, path) {
+      // Script and image files carry a fingerprint in their name and can be kept; the rest must stay fresh.
+      res.header('cache-control', path.includes('/_expo/') || path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+    },
+  });
   const indexHtml = readFileSync(join(webDir, 'index.html'), 'utf8');
+  app.get('/', (_req, reply) => reply.type('text/html').header('cache-control', 'no-cache').send(indexHtml));
   const RESERVED = /^\/(v1|admin|legal|health|app\.apk)(\/|$)/;
   app.setNotFoundHandler((req, reply) => {
     // Any other page address belongs to the app's own router.

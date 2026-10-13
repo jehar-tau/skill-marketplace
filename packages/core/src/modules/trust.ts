@@ -139,6 +139,12 @@ async function resolveAgreement(tx: Tx, agreementId: string, timedOut: boolean):
     await tx.exec(`UPDATE capability_trust SET completed_jobs = completed_jobs + 1 WHERE capability_id = $1`, [a.capability_id]);
     await tx.exec(`UPDATE requester_trust SET completed_jobs = completed_jobs + 1 WHERE account_id = $1`, [a.requester_id]);
     await tx.exec(`UPDATE requests SET status = 'completed', updated_at = now() WHERE id = $1`, [a.request_id]);
+    // A finished job puts each person on the other's list, so they can find each other again.
+    await tx.exec(
+      `INSERT INTO saved_people(owner_id, person_id, conversation_id, source) VALUES ($1, $2, $3, 'job'), ($2, $1, $3, 'job')
+       ON CONFLICT (owner_id, person_id) DO NOTHING`,
+      [a.requester_id, a.provider_id, a.conversation_id],
+    );
   }
   await postSystemMessage(tx, a.conversation_id, 'agreement', { agreementId, event: result });
   await emit(tx, 'job.resolved', 'agreement', agreementId, { result });
@@ -251,4 +257,37 @@ export async function submitUdyam(actor: Actor, reference: string) {
     ),
   );
   return { state: 'submitted' };
+}
+
+// What the app should ask this person about next time it opens: jobs whose time
+// has passed and they have not said whether it happened, and finished jobs they have not rated.
+export async function pendingReviews(actor: Actor) {
+  return asActor(actor.accountId, (tx) =>
+    tx.elevated(async () => {
+      const rows = await tx.query(
+        `SELECT a.id, a.conversation_id, a.what, a.state, a.scheduled_for,
+                oa.display_name AS other_name,
+                (a.provider_id = $1) AS i_am_provider
+         FROM agreements a
+         JOIN accounts oa ON oa.id = CASE WHEN a.requester_id = $1 THEN a.provider_id ELSE a.requester_id END
+         WHERE (a.requester_id = $1 OR a.provider_id = $1)
+           AND (
+             (a.state = 'confirmed' AND a.scheduled_for <= now()
+               AND NOT EXISTS (SELECT 1 FROM job_confirmations j WHERE j.agreement_id = a.id AND j.account_id = $1))
+             OR (a.state = 'completed' AND a.resolved_at > now() - interval '30 days'
+               AND NOT EXISTS (SELECT 1 FROM ratings r WHERE r.agreement_id = a.id AND r.rater_id = $1))
+           )
+         ORDER BY a.scheduled_for DESC LIMIT 5`,
+        [actor.accountId],
+      );
+      return rows.map((r) => ({
+        agreementId: r.id as string,
+        conversationId: r.conversation_id as string,
+        what: r.what as string,
+        otherName: (r.other_name as string | null) ?? null,
+        need: r.state === 'completed' ? ('rate' as const) : ('answer' as const),
+        iAmProvider: r.i_am_provider as boolean,
+      }));
+    }),
+  );
 }

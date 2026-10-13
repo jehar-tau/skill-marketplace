@@ -90,8 +90,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       locale,
       t: STRINGS[locale],
       voiceInput,
-      role: storedRole ?? (me ? me.defaultView : null),
-      roleChosen: storedRole !== null,
+      // For now the app is only for people offering a talent. The customer side stays
+      // in the code and is switched on per device (storage key 'role' = 'find') for testing.
+      role: storedRole === 'find' ? 'find' : 'offer',
+      roleChosen: true,
       setRole: async (r) => {
         setStoredRole(r);
         await setItem('role', r);
@@ -107,7 +109,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await saveTokens(tokens);
         setSignedIn(true);
         connectLive();
-        await api('/v1/me', { method: 'PATCH', body: { preferredLocale: locale, ...(storedRole ? { defaultView: storedRole } : {}) } }).then(setMe);
+        await api('/v1/me', { method: 'PATCH', body: { preferredLocale: locale, defaultView: storedRole === 'find' ? 'find' : 'offer' } }).then(setMe);
       },
       signOut: async () => {
         await api('/v1/auth/logout', { method: 'POST' }).catch(() => undefined);

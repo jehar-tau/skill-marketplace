@@ -97,11 +97,12 @@ export async function sendMessage(actor: Actor, conversationId: string, body: { 
     let kind = 'text';
     const meta: Record<string, unknown> = {};
     if (body.mediaAssetId) {
-      const asset = await tx.maybeOne(`SELECT id FROM media_assets WHERE id = $1 AND owner_id = $2 AND conversation_id = $3 AND kind = 'image'`, [
+      const asset = await tx.maybeOne(`SELECT id, kind FROM media_assets WHERE id = $1 AND owner_id = $2 AND conversation_id = $3`, [
         body.mediaAssetId, actor.accountId, conversationId,
       ]);
       if (!asset) throw badRequest('media_not_found');
-      kind = 'image';
+      // A photo or a voice note.
+      kind = asset.kind as string;
       meta.mediaAssetId = body.mediaAssetId;
     }
     const text = body.body?.trim() ?? null;
@@ -192,6 +193,7 @@ const CONV_SELECT = `
          EXISTS (SELECT 1 FROM verifications v WHERE v.account_id = c.provider_id AND v.kind = 'udyam' AND v.state = 'verified') AS verified,
          (SELECT m.body FROM messages m WHERE m.conversation_id = c.id AND m.kind = 'text' AND m.deleted_at IS NULL ORDER BY m.seq DESC LIMIT 1) AS last_text,
          EXISTS (SELECT 1 FROM contact_shares cs WHERE cs.conversation_id = c.id AND cs.shared_by = $1) AS i_shared_number,
+         EXISTS (SELECT 1 FROM saved_people sp WHERE sp.owner_id = $1 AND sp.person_id = oa.id) AS saved,
          EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = c.requester_id AND b.blocked_id = c.provider_id) OR (b.blocker_id = c.provider_id AND b.blocked_id = c.requester_id)) AS blocked
   FROM conversations c
   JOIN accounts oa ON oa.id = CASE WHEN c.requester_id = $1 THEN c.provider_id ELSE c.requester_id END
@@ -231,6 +233,7 @@ function conversationView(r: Record<string, any>, me: string) {
     theirReadSeq: r.their_read_seq as number,
     theirDeliveredSeq: r.their_delivered_seq as number,
     iSharedNumber: r.i_shared_number as boolean,
+    saved: r.saved as boolean,
     blocked: r.blocked as boolean,
   };
 }
@@ -250,6 +253,68 @@ export async function getConversation(actor: Actor, conversationId: string) {
       const r = await tx.maybeOne(`${CONV_SELECT} AND c.id = $2`, [actor.accountId, conversationId]);
       if (!r) throw notFound('conversation_not_found');
       return conversationView(r, actor.accountId);
+    }),
+  );
+}
+
+// ---------------------------------------------------------------- my people
+
+// Keep the other person from a chat, to find them again easily.
+export async function savePerson(actor: Actor, conversationId: string) {
+  await asActor(actor.accountId, async (tx) => {
+    const conv = await loadConversation(tx, actor, conversationId);
+    await tx.exec(
+      `INSERT INTO saved_people(owner_id, person_id, conversation_id) VALUES ($1, $2, $3)
+       ON CONFLICT (owner_id, person_id) DO UPDATE SET conversation_id = EXCLUDED.conversation_id`,
+      [actor.accountId, otherParty(conv, actor.accountId), conversationId],
+    );
+  });
+}
+
+export async function removePerson(actor: Actor, personId: string) {
+  await asActor(actor.accountId, (tx) => tx.exec(`DELETE FROM saved_people WHERE owner_id = $1 AND person_id = $2`, [actor.accountId, personId]));
+}
+
+export async function listPeople(actor: Actor) {
+  return asActor(actor.accountId, (tx) =>
+    tx.elevated(async () => {
+      const rows = await tx.query(
+        `SELECT sp.person_id, sp.source, a.display_name, a.status,
+                c.id AS conversation_id, c.requester_id, cv.original_text AS capability_text,
+                ct.completed_jobs AS cap_jobs, ct.rating_avg AS cap_avg, ct.rating_count AS cap_count,
+                rt.completed_jobs AS req_jobs, rt.rating_avg AS req_avg, rt.rating_count AS req_count
+         FROM saved_people sp
+         JOIN accounts a ON a.id = sp.person_id
+         -- The most recent chat between the two is where "connect" takes them.
+         JOIN LATERAL (
+           SELECT * FROM conversations c2
+           WHERE (c2.requester_id = sp.owner_id AND c2.provider_id = sp.person_id) OR (c2.requester_id = sp.person_id AND c2.provider_id = sp.owner_id)
+           ORDER BY COALESCE(c2.last_message_at, c2.created_at) DESC LIMIT 1
+         ) c ON true
+         JOIN capabilities cap ON cap.id = c.capability_id
+         JOIN capability_versions cv ON cv.id = cap.current_version_id
+         LEFT JOIN capability_trust ct ON ct.capability_id = c.capability_id
+         LEFT JOIN requester_trust rt ON rt.account_id = c.requester_id
+         WHERE sp.owner_id = $1 AND a.status = 'active'
+         ORDER BY sp.created_at DESC LIMIT 200`,
+        [actor.accountId],
+      );
+      return rows.map((r) => {
+        const theyHelpMe = r.requester_id === actor.accountId;
+        return {
+          personId: r.person_id as string,
+          displayName: (r.display_name as string | null) ?? null,
+          // 'provider': someone who helps me. 'customer': someone I help.
+          relation: theyHelpMe ? ('provider' as const) : ('customer' as const),
+          // Only the talent they were matched to me for; never their other talents.
+          talent: theyHelpMe ? (r.capability_text as string) : null,
+          trust: theyHelpMe
+            ? trustLine({ completed_jobs: r.cap_jobs, rating_avg: r.cap_avg, rating_count: r.cap_count })
+            : trustLine({ completed_jobs: r.req_jobs, rating_avg: r.req_avg, rating_count: r.req_count }),
+          conversationId: r.conversation_id as string,
+          fromJob: r.source === 'job',
+        };
+      });
     }),
   );
 }

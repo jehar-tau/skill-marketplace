@@ -1,32 +1,85 @@
+import * as Linking from 'expo-linking';
 import { Redirect } from 'expo-router';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, getDeviceId, platform, saveServerAddress } from '../lib/api';
-import * as Linking from 'expo-linking';
 import { apiUrl } from '../lib/config';
 import { LOCALE_NAMES, type Locale } from '../lib/i18n';
+import { setItem } from '../lib/storage';
+import { TALENT_COUNT, TALENT_GROUPS } from '../lib/talents';
 import { useTheme } from '../lib/theme';
 import { useApp } from '../state';
-import { Btn, Card, Chip, errorText, Field, Notice, Txt } from '../ui';
+import { Btn, Chip, errorText, Field, Notice, Sheet, Txt } from '../ui';
 
-// Phone number and code are the only fields (spec §5.1). Language is pre-selected from the device.
+// A slow carousel of everyday talents, so people recognise themselves in one.
+function Ideas({ width: guess }: { width: number }) {
+  const th = useTheme();
+  // Measured, not guessed: the first window size a browser reports can be wrong.
+  const [measured, setMeasured] = useState(0);
+  const width = measured || guess;
+  const { t } = useApp();
+  const [index, setIndex] = useState(0);
+  const ref = useRef<ScrollView>(null);
+  const touched = useRef(false);
+
+  const current = useRef(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (touched.current) return;
+      current.current = (current.current + 1) % t.ideas.length;
+      // Not animated: smooth scrolling fights with snap-to-card in some browsers and leaves the card behind.
+      ref.current?.scrollTo({ x: current.current * width, animated: false });
+      setIndex(current.current);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [t.ideas.length, width]);
+
+  return (
+    <View style={{ gap: 10 }} onLayout={(e) => setMeasured(Math.floor(e.nativeEvent.layout.width))}>
+      <ScrollView ref={ref} horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ width }}
+        onScrollBeginDrag={() => (touched.current = true)}
+        onMomentumScrollEnd={(e) => { current.current = Math.round(e.nativeEvent.contentOffset.x / width); setIndex(current.current); }}>
+        {t.ideas.map(([icon, title, line]) => (
+          <View key={title} style={{ width }}>
+            <View style={{ backgroundColor: th.accentSoft, borderRadius: 20, padding: 22, gap: 8, minHeight: 170, justifyContent: 'center' }}>
+              <Txt size={40}>{icon}</Txt>
+              <Txt size={21} weight="700">{title}</Txt>
+              <Txt size={16} mute>{line}</Txt>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+      <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+        {t.ideas.map(([, title], i) => (
+          <View key={title} style={{ width: i === index ? 18 : 6, height: 6, borderRadius: 3, backgroundColor: i === index ? th.accent : th.line }} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Three short screens, one thing on each: the idea, your number, the code.
 export default function Onboarding() {
   const th = useTheme();
   const insets = useSafeAreaInsets();
-  const { t, locale, setLocale, signIn, signedIn, role, setRole } = useApp();
+  const { width: screen } = useWindowDimensions();
+  const { t, locale, setLocale, signIn, signedIn } = useApp();
+  const [step, setStep] = useState<'welcome' | 'phone' | 'code'>('welcome');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [step, setStep] = useState<'role' | 'phone' | 'code'>(role ? 'phone' : 'role');
   const [devCode, setDevCode] = useState<string | null>(null);
   const [pilot, setPilot] = useState(false);
-  const [taps, setTaps] = useState(0);
-  const [server, setServer] = useState(apiUrl());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [taps, setTaps] = useState(0);
+  const [server, setServer] = useState(apiUrl());
+  const [ideasOpen, setIdeasOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   if (signedIn) return <Redirect href="/" />;
   const digits = phone.replace(/\D/g, '');
+  const width = Math.min(screen, 480) - 48;
 
   async function start() {
     setBusy(true);
@@ -56,66 +109,97 @@ export default function Onboarding() {
     }
   }
 
+  const link = (label: string, path: string) => (
+    <Pressable accessibilityRole="link" onPress={() => Linking.openURL(apiUrl() + path)}><Txt size={13} color={th.accent}>{label}</Txt></Pressable>
+  );
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: th.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: insets.top + 24, gap: 18, width: '100%', maxWidth: 480, alignSelf: 'center' }}>
-        <View style={{ gap: 4 }}>
-          <Txt size={28} weight="800" color={th.accent}>{step === 'role' ? t.roleTitle : role === 'offer' ? t.provHeadline : t.findTitle}</Txt>
-          <Pressable onPress={() => setTaps((n) => n + 1)} accessible={false}><Txt mute>{t.appName}</Txt></Pressable>
-        </View>
-        {taps >= 5 ? (
-          <View style={{ gap: 8 }}>
-            <Field label="Server address (testers only)" value={server} onChangeText={setServer} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
-            <Btn small kind="plain" label="Use this server" onPress={async () => { await saveServerAddress(server.trim() || null); setTaps(0); }} />
-          </View>
-        ) : null}
-        <View style={{ gap: 8 }}>
-          <Txt size={14} mute>{t.chooseLanguage}</Txt>
-          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            {(Object.keys(LOCALE_NAMES) as Locale[]).map((l) => <Chip key={l} label={LOCALE_NAMES[l]} on={l === locale} onPress={() => setLocale(l)} />)}
-          </View>
-        </View>
-        {error ? <Notice text={error} tone="warn" /> : null}
-        {step === 'role' ? (
+      <ScrollView keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20, gap: 22, width: '100%', maxWidth: 480, alignSelf: 'center' }}>
+        {step === 'welcome' ? (
           <>
-            <Card onPress={async () => { await setRole('offer'); setStep('phone'); }} style={{ borderColor: th.accent, borderWidth: 1.5, backgroundColor: th.accentSoft }}>
-              <Txt size={19} weight="700" color={th.accent}>{t.roleOffer}</Txt>
-              <Txt size={15}>{t.roleOfferSub}</Txt>
-            </Card>
-            <Card onPress={async () => { await setRole('find'); setStep('phone'); }}>
-              <Txt size={19} weight="700">{t.roleFind}</Txt>
-              <Txt size={15} mute>{t.roleFindSub}</Txt>
-            </Card>
-          </>
-        ) : step === 'phone' ? (
-          <>
-            {role === 'offer' ? (
-              <View style={{ gap: 6 }}>
-                <Txt size={16}>① {t.provPromise1}</Txt>
-                <Txt size={16}>② {t.provPromise2}</Txt>
-                <Txt size={16}>③ {t.provPromise3}</Txt>
-                <Txt size={14} mute>{t.freeLine}</Txt>
+            <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'flex-end' }}>
+              {(Object.keys(LOCALE_NAMES) as Locale[]).map((l) => (
+                <Pressable key={l} accessibilityRole="button" accessibilityState={{ selected: l === locale }} onPress={() => setLocale(l)}
+                  style={{ paddingHorizontal: 12, minHeight: 36, justifyContent: 'center', borderRadius: 18, backgroundColor: l === locale ? th.accentSoft : 'transparent' }}>
+                  <Txt size={14} weight={l === locale ? '700' : '400'} color={l === locale ? th.accent : th.mute}>{LOCALE_NAMES[l]}</Txt>
+                </Pressable>
+              ))}
+            </View>
+            <View style={{ flex: 1, justifyContent: 'center', gap: 22 }}>
+              <View style={{ gap: 10 }}>
+                <Txt size={15} weight="700" color={th.accent}>{t.heroWhy}</Txt>
+                <Pressable onPress={() => setTaps((n) => n + 1)} accessible={false}>
+                  <Txt size={31} weight="800" style={{ lineHeight: 42 }}>{t.heroTitle}</Txt>
+                </Pressable>
+                <Txt size={17} mute>{t.heroSub}</Txt>
+              </View>
+              <Ideas width={width} />
+              <Pressable accessibilityRole="button" onPress={() => setIdeasOpen(true)} style={{ minHeight: 44, justifyContent: 'center' }}>
+                <Txt size={15} mute style={{ textAlign: 'center' }}>
+                  {t.moreIdeasLead} <Txt size={15} weight="700" color={th.accent} style={{ textDecorationLine: 'underline' }}>{t.moreIdeasLink(Math.floor(TALENT_COUNT / 50) * 50)}</Txt>
+                </Txt>
+              </Pressable>
+            </View>
+            {taps >= 5 ? (
+              <View style={{ gap: 8 }}>
+                <Field label="Server address (testers only)" value={server} onChangeText={setServer} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+                <Btn small kind="plain" label="Use this server" onPress={async () => { await saveServerAddress(server.trim() || null); setTaps(0); }} />
               </View>
             ) : null}
-            <Field key="phone" label={t.phonePrompt} value={phone} onChangeText={setPhone} placeholder={t.phoneHint} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={14} autoFocus onSubmitEditing={() => digits.length >= 10 && start()} />
-            <Btn label={role === 'offer' ? t.getStarted : t.sendCode} busy={busy} disabled={digits.length < 10} onPress={start} />
-            <Btn kind="plain" label={t.back} onPress={() => setStep('role')} />
+            <View style={{ gap: 12 }}>
+              <Btn label={t.getStarted} onPress={() => setStep('phone')} />
+              <Txt size={13} mute style={{ textAlign: 'center' }}>{t.heroBusiness}</Txt>
+            </View>
           </>
         ) : (
-          <>
-            <Field key="code" label={pilot ? t.pilotPrompt : t.codePrompt} value={code} keyboardType="number-pad" autoComplete="sms-otp" textContentType="oneTimeCode" maxLength={6} autoFocus
-              onChangeText={(v) => { const c = v.replace(/\D/g, ''); setCode(c); if (c.length === 6 && !busy) void verify(c); }} style={{ letterSpacing: 6, fontSize: 22 }} />
-            {devCode ? <Txt size={14} mute>{t.devCode}: {devCode}</Txt> : null}
-            <Btn label={t.verify} busy={busy} disabled={code.length !== 6} onPress={() => verify()} />
-            <Btn kind="plain" label={t.changeNumber} onPress={() => { setStep('phone'); setError(null); }} />
-          </>
+          <View style={{ flex: 1, justifyContent: 'center', gap: 18 }}>
+            <Txt size={26} weight="800">{step === 'phone' ? t.phonePrompt : pilot ? t.pilotPrompt : t.codePrompt}</Txt>
+            {error ? <Notice text={error} tone="warn" /> : null}
+            {step === 'phone' ? (
+              <>
+                <Field key="phone" value={phone} onChangeText={setPhone} placeholder={t.phoneHint} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" maxLength={14} autoFocus
+                  onSubmitEditing={() => digits.length >= 10 && start()} style={{ fontSize: 22 }} />
+                <Btn label={t.sendCode} busy={busy} disabled={digits.length < 10} onPress={start} />
+                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                  <Txt size={13} mute>{t.freeLine}</Txt>
+                  {link('Terms', '/legal/terms')}
+                  {link('Privacy', '/legal/privacy')}
+                </View>
+              </>
+            ) : (
+              <>
+                <Field key="code" value={code} keyboardType="number-pad" autoComplete="sms-otp" textContentType="oneTimeCode" maxLength={6} autoFocus
+                  onChangeText={(v) => { const c = v.replace(/\D/g, ''); setCode(c); if (c.length === 6 && !busy) void verify(c); }} style={{ letterSpacing: 8, fontSize: 26 }} />
+                {devCode ? <Txt size={14} mute>{t.devCode}: {devCode}</Txt> : null}
+                <Btn label={t.verify} busy={busy} disabled={code.length !== 6} onPress={() => verify()} />
+                <Btn kind="plain" label={t.changeNumber} onPress={() => { setStep('phone'); setError(null); }} />
+              </>
+            )}
+          </View>
         )}
-        <Txt size={13} mute>{t.terms}</Txt>
-        <View style={{ flexDirection: 'row', gap: 16 }}>
-          <Pressable accessibilityRole="link" onPress={() => Linking.openURL(apiUrl() + '/legal/terms')}><Txt size={13} color={th.accent}>Terms</Txt></Pressable>
-          <Pressable accessibilityRole="link" onPress={() => Linking.openURL(apiUrl() + '/legal/privacy')}><Txt size={13} color={th.accent}>Privacy</Txt></Pressable>
-        </View>
       </ScrollView>
+      <Sheet visible={ideasOpen} onClose={() => setIdeasOpen(false)} title={t.ideasTitle}>
+        <Txt size={15} mute>{t.ideasSub}</Txt>
+        <Field value={search} onChangeText={setSearch} placeholder={t.ideasSearch} autoCorrect={false} />
+        {(() => {
+          const q = search.trim().toLowerCase();
+          const groups = TALENT_GROUPS.map((g) => ({ ...g, items: q ? g.items.filter((i) => i.toLowerCase().includes(q)) : g.items })).filter((g) => g.items.length > 0);
+          if (groups.length === 0) return <Txt mute>{t.ideasNone}</Txt>;
+          return groups.map((g) => (
+            <View key={g.title.en} style={{ gap: 8 }}>
+              <Txt size={16} weight="700">{g.icon} {g.title[locale]}</Txt>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {g.items.map((item) => (
+                  // Picking one carries it into the first question after sign-in.
+                  <Chip key={item} label={item} onPress={async () => { await setItem('picked_talent', item); setIdeasOpen(false); setStep('phone'); }} />
+                ))}
+              </View>
+            </View>
+          ));
+        })()}
+      </Sheet>
     </KeyboardAvoidingView>
   );
 }
