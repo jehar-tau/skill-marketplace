@@ -207,8 +207,6 @@ The blueprint starts with photos kept on the server's own disk, which a free ser
    | `PILOT_CODE` | six digits of your choice |
    | `PILOT_PHONES` | testers' numbers, comma-separated |
    | `SUPPORT_EMAIL` | an inbox you read |
-   | `AI_LLM_API_KEY`, `AI_EMBED_API_KEY` | your Gemini key (ideally a fresh one) |
-   | `AI_ASR_API_KEY` | your Groq key (ideally a fresh one) |
 
 4. Click **Apply**. The first build takes several minutes. Render shows the address, like `https://skill-marketplace-staging.onrender.com`.
 
@@ -236,6 +234,21 @@ Put the Render address in `apps/mobile/eas.json` under `staging`, then run `APP_
 This path was rehearsed on this Mac (the same image, in staging mode, against a local database) but has not been run on Supabase or Render themselves.
 
 ---
+
+## Running with no AI cost at all (the default for the hosted server)
+
+The app can run without any AI service:
+
+| Job | How it is done | Cost |
+| --- | --- | --- |
+| Understanding what people say | Built-in keyword rules for Marathi, Hindi and English | None |
+| Matching a request to a talent | A 23 MB open model (all-MiniLM-L6) that runs inside the server | None |
+| Building profiles from chats | Built-in patterns; **English chats only**, other languages are skipped | None |
+| Voice input, reading photos | Not available in this mode | — |
+
+Settings: `AI_INTERPRETER=rules`, `AI_EMBEDDER=minilm`, `AI_LEARNER=rules`, `AI_ASR=none`. After changing the matching model run `pnpm db:migrate` and `pnpm db:reembed`.
+
+What you give up compared with hosted models: unusual wording is understood less well, profiles are not learned from Marathi or Hindi chats, photos are stored but not described, and there is no voice input. Steps 1 and 2 switch those on (free within daily limits) whenever you want them; nothing else has to change.
 
 ## Option B — fully open source, nothing to pay, running on this Mac
 

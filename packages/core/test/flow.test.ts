@@ -8,6 +8,7 @@ import * as matching from '../src/modules/matching';
 import * as notifications from '../src/modules/notifications';
 import * as profile from '../src/modules/profile';
 import { chatPrompt, type ChatForLearning } from '../src/ai/learn';
+import { extractWithRules, mostlyEnglish } from '../src/ai/learnRules';
 import { devOutbox } from '../src/modules/providers';
 import * as safety from '../src/modules/safety';
 import * as trust from '../src/modules/trust';
@@ -444,5 +445,34 @@ describe('AI profile learning', () => {
     await profile.removeInsight(pro, mine[0]!.id);
     expect(await profile.listInsights(pro)).toHaveLength(1);
     expect((await profile.learnFromConversation(conversationId!, fake)).added).toBe(0);
+  });
+});
+
+describe('profile learning without an AI service', () => {
+  const chat = (lines: [('PROVIDER' | 'CUSTOMER'), string][], agreed?: ChatForLearning['agreed']): ChatForLearning => ({
+    talent: 'I do party catering', agreed, lines: lines.map(([who, text]) => ({ who, text })),
+  });
+
+  it('picks out what the provider said and what the customer praised, from an English chat', async () => {
+    const out = await extractWithRules(chat([
+      ['CUSTOMER', 'Can you do it for Rs 150 per plate?'],
+      ['PROVIDER', 'No, it is Rs 250 per plate. I need 2 days notice and I can deliver.'],
+      ['PROVIDER', 'I am available on weekends'],
+      ['CUSTOMER', 'The food was delicious and you were on time. Will order again!'],
+    ], { what: 'Catering for 30 people', priceRupees: 7500 }));
+    const texts = out.facts.map((f) => f.text);
+    expect(texts).toContain('Quoted Rs 250 per plate');
+    // The customer's lower offer is not the provider's price.
+    expect(texts.join(' ')).not.toContain('150');
+    expect(texts).toContain('Asks for 2 days notice');
+    expect(texts).toContain('Delivers');
+    expect(texts).toContain('Agreed Rs 7500 for: Catering for 30 people');
+    expect(out.facts.filter((f) => f.kind === 'strength').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('leaves a chat alone when it is not in English', async () => {
+    expect(mostlyEnglish([{ text: 'मला उद्या दोन किलो बिर्याणी पाहिजे, किती होतील?' }])).toBe(false);
+    expect(mostlyEnglish([{ text: 'mala udya 2 kg biryani pahije, kiti hoil? Rs 900 hoil ka' }])).toBe(false);
+    expect((await extractWithRules(chat([['PROVIDER', 'हो, ९०० रुपये होतील. Rs 900'], ['CUSTOMER', 'ठीक आहे, उद्या संध्याकाळी द्या']]))).facts).toHaveLength(0);
   });
 });
