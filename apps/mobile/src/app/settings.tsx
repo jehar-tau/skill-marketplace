@@ -45,6 +45,14 @@ export default function Settings() {
           </Card>
 
           <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Txt style={{ flex: 1 }}>{t.aiSetting}</Txt>
+              <Switch value={me.aiLearning} onValueChange={(v) => patchMe({ aiLearning: v })} accessibilityLabel={t.aiSetting} />
+            </View>
+            <Txt size={13} mute>{t.aiSettingSub}</Txt>
+          </Card>
+
+          <Card>
             <Txt size={14} mute>{t.language}</Txt>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               {(Object.keys(LOCALE_NAMES) as Locale[]).map((l) => <Chip key={l} label={LOCALE_NAMES[l]} on={l === locale} onPress={() => setLocale(l)} />)}

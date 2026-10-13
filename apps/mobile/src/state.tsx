@@ -10,6 +10,7 @@ export interface Me {
   displayName: string | null;
   preferredLocale: Locale;
   defaultView: 'find' | 'offer';
+  aiLearning: boolean;
   phoneMasked: string;
   providerSettings: { paused: boolean; quietStart: string; quietEnd: string; dailyCap: number };
   udyam: string | null;

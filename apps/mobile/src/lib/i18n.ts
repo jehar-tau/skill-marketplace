@@ -249,6 +249,10 @@ const en = {
   play: 'Play',
   reviewRate: (name: string) => `How was it with ${name}?`,
   later: 'Later',
+  learnedCount: (n: number) => `${n} ${n === 1 ? 'thing' : 'things'} learned from your work`,
+  learnedNote: 'Written by AI from your chats and photos. Only you can see this. Remove anything that is wrong.',
+  aiSetting: 'Let AI learn from my chats and photos to build my profile',
+  aiSettingSub: 'A chat is only read when both people in it have this on.',
 };
 
 type Dict = typeof en;
@@ -502,6 +506,10 @@ const hi: Dict = {
   play: 'चलाएँ',
   reviewRate: (name: string) => `${name} के साथ कैसा रहा?`,
   later: 'बाद में',
+  learnedCount: (n: number) => `आपके काम से ${n} बातें सीखी गईं`,
+  learnedNote: 'AI ने आपकी चैट और फ़ोटो से लिखा है. यह केवल आपको दिखता है. जो गलत हो उसे हटा दें.',
+  aiSetting: 'AI को मेरी चैट और फ़ोटो से सीखकर मेरी प्रोफ़ाइल बनाने दें',
+  aiSettingSub: 'कोई चैट तभी पढ़ी जाती है जब उसमें दोनों लोगों ने यह चालू रखा हो.',
 };
 
 const mr: Dict = {
@@ -753,6 +761,10 @@ const mr: Dict = {
   play: 'ऐका',
   reviewRate: (name: string) => `${name} यांच्यासोबत कसे झाले?`,
   later: 'नंतर',
+  learnedCount: (n: number) => `तुमच्या कामातून ${n} गोष्टी शिकल्या`,
+  learnedNote: 'AI ने तुमच्या चॅट आणि फोटोंवरून लिहिले आहे. हे फक्त तुम्हालाच दिसते. जे चुकीचे असेल ते काढा.',
+  aiSetting: 'AI ला माझ्या चॅट आणि फोटोंवरून शिकून माझी प्रोफाइल तयार करू द्या',
+  aiSettingSub: 'एखादी चॅट तेव्हाच वाचली जाते जेव्हा त्यातील दोघांनीही हे सुरू ठेवले असेल.',
 };
 
 export const STRINGS: Record<Locale, Dict> = { en, hi, mr };

@@ -357,6 +357,7 @@ export async function addProof(actor: Actor, capabilityId: string, body: { link?
       await tx.exec(`INSERT INTO capability_proofs(capability_id, account_id, kind, media_asset_id) VALUES ($1, $2, 'photo', $3)`, [
         capabilityId, actor.accountId, body.mediaAssetId,
       ]);
+      await emit(tx, 'proof.added', 'media', body.mediaAssetId, { capabilityId });
     } else {
       throw badRequest('empty_proof');
     }

@@ -16,6 +16,7 @@ interface Lead {
   requesterName: string | null; requesterTrust: Trust; capabilityText: string; conversationId: string | null;
 }
 interface Service { id: string; status: string; originalText: string; categoryLabel: string; trust: Trust; proofLinks: number; proofPhotos: number }
+interface Insight { id: string; capabilityId: string | null; kind: string; text: string }
 interface Summary {
   activeSkills: number; leadsThisWeek: number; leadsTotal: number; replied: number; missed: number; jobsDone: number;
   ratingAvg: number | null; searching: boolean;
@@ -44,6 +45,8 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
   const [pushOn, setPushOn] = useState(true);
   const [justLive, setJustLive] = useState(false);
   const [areaOpen, setAreaOpen] = useState(false);
+  const insights = useLive<Insight[]>(() => api('/v1/profile/insights'), ['agreement'], [reloadKey]);
+  const [openLearned, setOpenLearned] = useState<string | null>(null);
   const [proofFor, setProofFor] = useState<string | null>(null);
   const [proofFirst, setProofFirst] = useState(false);
   const area = useLive<{ area: { serviceRadiusM: number } | null }>(() => api('/v1/provider/area'), [], [reloadKey]);
@@ -207,6 +210,38 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
           <Txt size={13} mute>{sv.categoryLabel}{sv.status === 'paused' ? ` · ${t.paused}` : ''}</Txt>
           <Txt size={16}>{sv.originalText}</Txt>
           <TrustLine trust={sv.trust} />
+          {(() => {
+            // What the AI has learned for this talent: a short blurb, then the facts behind it on request.
+            const mine = (insights.data ?? []).filter((i) => i.capabilityId === sv.id);
+            const blurb = mine.find((i) => i.kind === 'summary');
+            const facts = mine.filter((i) => i.kind !== 'summary');
+            if (mine.length === 0) return null;
+            return (
+              <View style={{ gap: 6, backgroundColor: th.accentSoft, borderRadius: 12, padding: 12 }}>
+                {blurb ? <Txt size={15}>{blurb.text}</Txt> : null}
+                {facts.length > 0 ? (
+                  <Pressable accessibilityRole="button" onPress={() => setOpenLearned(openLearned === sv.id ? null : sv.id)} style={{ minHeight: 32, justifyContent: 'center' }}>
+                    <Txt size={13} weight="700" color={th.accent}>{t.learnedCount(facts.length)} {openLearned === sv.id ? '▴' : '▾'}</Txt>
+                  </Pressable>
+                ) : null}
+                {openLearned === sv.id ? (
+                  <>
+                    {facts.map((f) => (
+                      <View key={f.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+                        <Txt size={14} style={{ flex: 1 }}>• {f.text}</Txt>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t.remove} hitSlop={8}
+                          onPress={async () => { insights.setData((insights.data ?? []).filter((x) => x.id !== f.id)); await api(`/v1/profile/insights/${f.id}`, { method: 'DELETE' }).catch(() => undefined); }}
+                          style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
+                          <Txt size={14} mute>✕</Txt>
+                        </Pressable>
+                      </View>
+                    ))}
+                    <Txt size={12} mute>{t.learnedNote}</Txt>
+                  </>
+                ) : null}
+              </View>
+            );
+          })()}
           <Pressable accessibilityRole="button" onPress={() => { setProofFirst(false); setProofFor(sv.id); }} style={{ minHeight: 36, justifyContent: 'center' }}>
             <Txt size={14} color={th.accent} weight="600">{sv.proofLinks + sv.proofPhotos > 0 ? t.proofCount(sv.proofLinks, sv.proofPhotos) : t.proofAdd}</Txt>
           </Pressable>

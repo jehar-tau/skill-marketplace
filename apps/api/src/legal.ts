@@ -33,8 +33,16 @@ const privacy = () => page('Privacy policy', `
 </ul>
 <h2>Voice</h2>
 <p>If you speak instead of typing, the recording is turned into text and then deleted. We keep the text, not the audio.</p>
+<h2>How AI is used</h2>
+<p>An AI model reads what you say you are good at, the photos you add as examples of your work, and your chats about jobs, in order to build <b>your own</b> work profile: for example what you make, prices you quoted, and how you like to work.</p>
+<ul>
+  <li>What it writes is shown only to you, and you can delete any line.</li>
+  <li>Phone numbers, links and payment handles are removed before a chat is sent to the model.</li>
+  <li>You can switch this off in Settings. A chat is only read when both people in it have it switched on.</li>
+  <li>Voice notes are not read for this.</li>
+</ul>
 <h2>Who else handles your data</h2>
-<p>To understand what you say and to send alerts we may use outside services: a speech-to-text service, a language model, and a push-notification service. They receive only what is needed for that job. We do not sell your data and we do not use your chats or photos to train AI models.</p>
+<p>To understand what you say and to send alerts we may use outside services: a speech-to-text service, a language model, and a push-notification service. They receive only what is needed for that job. We do not sell your data, and we do not train AI models on your chats or photos.</p>
 <h2>What other people see</h2>
 <ul>
   <li>If you offer several services, a customer sees only the one that matched their request.</li>
