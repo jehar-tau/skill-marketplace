@@ -18,7 +18,7 @@ export const ChatLearning = z.object({
         text: z.string(),
       }),
     )
-    .max(6),
+    .max(10),
 });
 export type ChatLearning = z.infer<typeof ChatLearning>;
 
@@ -67,7 +67,10 @@ function parseJson(text: string): unknown {
   return JSON.parse(text.slice(a, b + 1));
 }
 
-export const learningAvailable = () => config.AI_INTERPRETER !== 'rules';
+// Whether a hosted model is doing the learning (it can also read photos and write
+// the blurb), and whether any learning happens at all.
+export const hostedLearning = () => config.AI_LEARNER === 'auto' && config.AI_INTERPRETER !== 'rules';
+export const learningAvailable = () => config.AI_LEARNER !== 'off';
 
 let anthropic: Anthropic | null = null;
 
