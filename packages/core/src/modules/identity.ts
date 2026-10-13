@@ -154,6 +154,7 @@ function publicAccount(a: Record<string, any>) {
     displayName: a.display_name as string | null,
     preferredLocale: a.preferred_locale as Locale,
     defaultView: a.default_view as 'find' | 'offer',
+    aiLearning: a.ai_learning as boolean,
     homeCellId: a.home_cell_id as string,
     createdAt: a.created_at as Date,
   };
@@ -184,12 +185,12 @@ export async function getMe(actor: Actor) {
 
 const maskPhone = (p: string) => p.slice(0, 3) + '•'.repeat(Math.max(0, p.length - 5)) + p.slice(-2);
 
-export async function updateMe(actor: Actor, patch: { displayName?: string; preferredLocale?: Locale; defaultView?: 'find' | 'offer' }) {
+export async function updateMe(actor: Actor, patch: { displayName?: string; preferredLocale?: Locale; defaultView?: 'find' | 'offer'; aiLearning?: boolean }) {
   await asActor(actor.accountId, (tx) =>
     tx.exec(
       `UPDATE accounts SET display_name = COALESCE($2, display_name), preferred_locale = COALESCE($3, preferred_locale),
-         default_view = COALESCE($4, default_view), updated_at = now() WHERE id = $1`,
-      [actor.accountId, patch.displayName?.trim() ?? null, patch.preferredLocale ?? null, patch.defaultView ?? null],
+         default_view = COALESCE($4, default_view), ai_learning = COALESCE($5, ai_learning), updated_at = now() WHERE id = $1`,
+      [actor.accountId, patch.displayName?.trim() ?? null, patch.preferredLocale ?? null, patch.defaultView ?? null, patch.aiLearning ?? null],
     ),
   );
   return getMe(actor);
@@ -264,6 +265,7 @@ export async function deleteAccountTx(tx: Tx, accountId: string, by: { id: strin
   await tx.exec(`UPDATE media_assets SET scan_state = 'rejected' WHERE owner_id = $1`, [accountId]);
   await tx.exec(`DELETE FROM verifications WHERE account_id = $1`, [accountId]);
   await tx.exec(`DELETE FROM capability_proofs WHERE account_id = $1`, [accountId]);
+  await tx.exec(`UPDATE profile_insights SET text = '', removed_at = now() WHERE account_id = $1`, [accountId]);
   await tx.exec(`DELETE FROM saved_people WHERE owner_id = $1 OR person_id = $1`, [accountId]);
   await tx.exec(`UPDATE conversations SET status = 'closed' WHERE requester_id = $1 OR provider_id = $1`, [accountId]);
   await emit(tx, 'account.deleted', 'account', accountId);

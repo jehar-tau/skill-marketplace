@@ -9,6 +9,7 @@ export type OutboxEventType =
   | 'media.uploaded'
   | 'agreement.confirmed'
   | 'job.resolved'
+  | 'proof.added'
   | 'account.deleted';
 
 export interface OutboxEvent {
@@ -31,5 +32,7 @@ export const JOBS = {
   responsePush: 'notify.response',
   mediaProcess: 'media.process',
   jobPrompt: 'trust.job_prompt',
+  learnChat: 'profile.learn_chat',
+  learnPhoto: 'profile.learn_photo',
   maintenance: 'maintenance.sweep',
 } as const;

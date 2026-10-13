@@ -6,6 +6,8 @@ import * as identity from '../src/modules/identity';
 import * as intake from '../src/modules/intake';
 import * as matching from '../src/modules/matching';
 import * as notifications from '../src/modules/notifications';
+import * as profile from '../src/modules/profile';
+import { chatPrompt, type ChatForLearning } from '../src/ai/learn';
 import { devOutbox } from '../src/modules/providers';
 import * as safety from '../src/modules/safety';
 import * as trust from '../src/modules/trust';
@@ -392,5 +394,55 @@ describe('account deletion', () => {
     const { devCode } = await identity.startOtp(gone.phone, '10.9.9.9');
     const again = await identity.verifyOtp({ phone: gone.phone, code: devCode!, deviceId: randomUUID(), platform: 'android' });
     expect(again.isNew).toBe(true);
+  });
+});
+
+describe('AI profile learning', () => {
+  it('learns from a chat only with both people opted in, hides contact details from the model, and keeps the result private', async () => {
+    const pro = await newUser('Caterer');
+    const [capId] = await offer(pro, 'I do party catering for birthdays');
+    const client = await newUser('Host');
+    const requestId = await ask(client, 'Need party catering for 30 people on Sunday');
+    await matching.dispatchRequest(requestId);
+    const match = (await matchesFor(requestId))[0]!;
+    const { conversationId } = await matching.respondToMatch(pro, match.id, 'interested');
+    await conversations.sendMessage(client, conversationId!, { clientMessageId: randomUUID(), body: 'Can you do veg and non-veg for 30? My number is 9876543210, address 12 MG Road' });
+    await conversations.sendMessage(pro, conversationId!, { clientMessageId: randomUUID(), body: 'Yes. Rs 250 per plate, I need 2 days notice. See www.example.com/menu' });
+    await conversations.sendMessage(client, conversationId!, { clientMessageId: randomUUID(), body: 'Great, the food last time was excellent' });
+
+    let seen: ChatForLearning | null = null;
+    const fake = async (chat: ChatForLearning) => {
+      seen = chat;
+      return { facts: [{ kind: 'price' as const, text: 'Quoted Rs 250 per plate for party catering' }, { kind: 'working_style' as const, text: 'Needs two days notice for party orders' }] };
+    };
+
+    // The customer switches AI learning off: nothing is read.
+    await identity.updateMe(client, { aiLearning: false });
+    expect(await profile.learnFromConversation(conversationId!, fake)).toMatchObject({ added: 0, skipped: 'opted_out' });
+    expect(seen).toBeNull();
+
+    await identity.updateMe(client, { aiLearning: true });
+    expect((await profile.learnFromConversation(conversationId!, fake)).added).toBe(2);
+    const prompt = chatPrompt(seen!);
+    expect(prompt).not.toContain('9876543210');
+    expect(prompt).not.toContain('example.com');
+    expect(prompt).toContain('PROVIDER: Yes.');
+
+    // Learning the same chat again adds nothing new.
+    expect((await profile.learnFromConversation(conversationId!, fake)).added).toBe(0);
+
+    const mine = await profile.listInsights(pro);
+    expect(mine.map((i) => i.kind).sort()).toEqual(['price', 'working_style']);
+    expect(mine.every((i) => i.capabilityId === capId)).toBe(true);
+    // Private: the customer and strangers see nothing, and cannot delete it.
+    expect(await profile.listInsights(client)).toHaveLength(0);
+    await expectCode(profile.removeInsight(client, mine[0]!.id), 'insight_not_found');
+    const leaked = await asActor(client.accountId, (tx) => tx.query(`SELECT 1 FROM profile_insights`));
+    expect(leaked).toHaveLength(0);
+
+    // The owner removes a line; it is not learned again.
+    await profile.removeInsight(pro, mine[0]!.id);
+    expect(await profile.listInsights(pro)).toHaveLength(1);
+    expect((await profile.learnFromConversation(conversationId!, fake)).added).toBe(0);
   });
 });

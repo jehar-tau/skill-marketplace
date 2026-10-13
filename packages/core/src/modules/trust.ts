@@ -147,7 +147,7 @@ async function resolveAgreement(tx: Tx, agreementId: string, timedOut: boolean):
     );
   }
   await postSystemMessage(tx, a.conversation_id, 'agreement', { agreementId, event: result });
-  await emit(tx, 'job.resolved', 'agreement', agreementId, { result });
+  await emit(tx, 'job.resolved', 'agreement', agreementId, { result, conversationId: a.conversation_id });
   return upd;
 }
 
