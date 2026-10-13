@@ -16,7 +16,9 @@ export const ROOT = findRoot();
 const envFile = join(ROOT, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
-const hexKey = z.string().regex(/^[0-9a-fA-F]{64}$/, '32-byte hex key required');
+// Either 64 hex characters, or any random string of 32+ characters (hosting
+// providers that generate secrets for you produce the latter).
+const hexKey = z.string().min(32, 'needs at least 32 characters');
 const optional = z.string().optional().transform((v) => (v ? v : undefined));
 
 const Env = z.object({
@@ -30,7 +32,13 @@ const Env = z.object({
   PORT: z.coerce.number().default(4000),
   APP_NAME: z.string().default('Skill Marketplace'),
   SUPPORT_EMAIL: z.string().default('support@example.com'),
-  PUBLIC_BASE_URL: z.string().default('http://localhost:4000'),
+  // Render sets RENDER_EXTERNAL_URL to the service's public address.
+  PUBLIC_BASE_URL: z.string().default(process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:4000'),
+  // Connection limits. Free database tiers allow few connections; see docs/ENVIRONMENTS.md.
+  DB_POOL_MAX: z.coerce.number().int().min(2).default(20),
+  DB_JOBS_POOL_MAX: z.coerce.number().int().min(2).default(6),
+  // Run the background worker inside the API process. Default: on in development, off in production.
+  INLINE_WORKER: z.enum(['true', 'false']).optional(),
   JWT_SECRET: z.string().min(32),
   PHONE_ENC_KEY: hexKey,
   PHONE_HASH_KEY: hexKey,

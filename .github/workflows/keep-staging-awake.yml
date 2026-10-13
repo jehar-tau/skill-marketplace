@@ -1,0 +1,17 @@
+name: Keep staging awake
+
+# A free hosted server sleeps after 15 quiet minutes and takes about a minute to
+# wake. While testers are active this visits it every 10 minutes during Indian
+# daytime so the first tap is not slow. Set the repository variable STAGING_URL
+# (Settings > Secrets and variables > Actions > Variables) to switch it on.
+on:
+  schedule:
+    - cron: "*/10 1-17 * * *" # 06:30 to 23:20 India time
+  workflow_dispatch:
+
+jobs:
+  ping:
+    if: ${{ vars.STAGING_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 90 "${{ vars.STAGING_URL }}/health"

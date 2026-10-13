@@ -6,7 +6,7 @@ Two views — **Find Help** and **Offer Help** — where people say what they ne
 
 | Path | What it is |
 | --- | --- |
-| `apps/mobile` | The app: React Native + Expo. Android is the target; the same code runs in a browser. |
+| `apps/mobile` | The app: React Native + Expo. One codebase produces the web app, the Android app and the iOS app. |
 | `apps/api` | HTTP API, realtime gateway, and the operations console at `/admin`. |
 | `apps/worker` | Background worker for production (in development the API runs it in-process). |
 | `packages/core` | Everything the backend does: sign-in, language understanding, matching, notifications, chat, trust, safety, admin. |
@@ -72,6 +72,8 @@ Everything runs with built-in stand-ins, chosen in `.env`:
 | `pnpm ai:check` | One real call to each AI service set in `.env`, with a plain pass/fail |
 | `pnpm eval` | Runs the labelled sentences in `packages/core/eval/cases.json` and reports accuracy (`pnpm eval rules` forces the built-in rules) |
 | `pnpm db:reembed` | Rebuilds matching vectors after changing the embedding model |
+| `pnpm build:web` | Builds the web app; the API then serves it at its own address |
+| `pnpm build:apk` | Builds an Android APK on this Mac |
 | `pnpm tunnel` | Gives the server a temporary public https address for phone testing |
 
 ## Public pages

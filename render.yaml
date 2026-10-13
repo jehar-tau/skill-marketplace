@@ -1,0 +1,72 @@
+# Free staging server on Render (https://render.com). In the Render dashboard choose
+# New > Blueprint, pick this repository, and fill in the values it asks for.
+# Steps and where each value comes from: SETUP.md, Step 7.
+#
+# One free instance runs both the API and the background worker. It sleeps after
+# 15 quiet minutes and takes about a minute to wake, which is fine for testing
+# and not for real users.
+services:
+  - type: web
+    name: skill-marketplace-staging
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: staging
+    healthCheckPath: /health
+    dockerCommand: sh -c "pnpm db:migrate && pnpm --filter @sm/api start"
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: APP_ENV, value: staging }
+      - { key: INLINE_WORKER, value: "true" }
+      # Free database tiers allow about 15 connections in total.
+      - { key: DB_POOL_MAX, value: "6" }
+      - { key: DB_JOBS_POOL_MAX, value: "3" }
+
+      # --- Database (Supabase): paste the two connection strings
+      - { key: DATABASE_OWNER_URL, sync: false }
+      - { key: DATABASE_APP_URL, sync: false }
+      - { key: DATABASE_APP_PASSWORD, sync: false }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: skill-marketplace-staging-redis, property: connectionString }
+
+      # --- Secrets: generated once by Render, unique to this environment
+      - { key: JWT_SECRET, generateValue: true }
+      - { key: PHONE_ENC_KEY, generateValue: true }
+      - { key: PHONE_HASH_KEY, generateValue: true }
+      - { key: MEDIA_SIGNING_KEY, generateValue: true }
+      - { key: ADMIN_TOKEN, generateValue: true }
+
+      # --- Sign-in for invited testers, no SMS
+      - { key: OTP_PROVIDER, value: pilot }
+      - { key: PILOT_CODE, sync: false }
+      - { key: PILOT_PHONES, sync: false }
+      - { key: PUSH_PROVIDER, value: expo }
+      - { key: SUPPORT_EMAIL, sync: false }
+
+      # --- AI: Gemini for understanding and matching, Groq for voice
+      - { key: AI_INTERPRETER, value: openai_compat }
+      - { key: AI_LLM_BASE_URL, value: "https://generativelanguage.googleapis.com/v1beta/openai" }
+      - { key: AI_LLM_MODEL, value: gemini-3.5-flash-lite }
+      - { key: AI_LLM_API_KEY, sync: false }
+      - { key: AI_EMBEDDER, value: openai_compat }
+      - { key: AI_EMBED_BASE_URL, value: "https://generativelanguage.googleapis.com/v1beta/openai" }
+      - { key: AI_EMBED_MODEL, value: gemini-embedding-001 }
+      - { key: AI_EMBED_DIMS, value: "768" }
+      - { key: AI_EMBED_API_KEY, sync: false }
+      - { key: AI_ASR, value: openai_compat }
+      - { key: AI_ASR_BASE_URL, value: "https://api.groq.com/openai/v1" }
+      - { key: AI_ASR_MODEL, value: whisper-large-v3 }
+      - { key: AI_ASR_API_KEY, sync: false }
+
+      # --- Chat photos. "local" keeps them on the server's own disk, which a free
+      # instance wipes whenever it restarts: fine for a first test. For photos that
+      # last, set MEDIA_STORAGE=s3 and add S3_BUCKET, S3_REGION, S3_ENDPOINT,
+      # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (SETUP.md, Step 7b).
+      - { key: MEDIA_STORAGE, value: local }
+
+  - type: keyvalue
+    name: skill-marketplace-staging-redis
+    plan: free
+    region: singapore
+    maxmemoryPolicy: noeviction
+    ipAllowList: []

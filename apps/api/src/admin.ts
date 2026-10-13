@@ -55,5 +55,6 @@ export function registerAdminRoutes(app: FastifyInstance) {
       return { ok: true };
     });
     r.get('/admin/api/audit', async () => admin.recentAudit());
+    r.get('/admin/api/errors', async () => admin.recentServerErrors());
   });
 }

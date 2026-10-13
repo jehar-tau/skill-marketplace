@@ -1,9 +1,11 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { config } from './config';
 
-const encKey = Buffer.from(config.PHONE_ENC_KEY, 'hex');
-const hashKey = Buffer.from(config.PHONE_HASH_KEY, 'hex');
-const mediaKey = Buffer.from(config.MEDIA_SIGNING_KEY, 'hex');
+// A 64-character hex value is used as the key directly; anything else is hashed down to 32 bytes.
+const toKey = (v: string) => (/^[0-9a-fA-F]{64}$/.test(v) ? Buffer.from(v, 'hex') : createHash('sha256').update(v).digest());
+const encKey = toKey(config.PHONE_ENC_KEY);
+const hashKey = toKey(config.PHONE_HASH_KEY);
+const mediaKey = toKey(config.MEDIA_SIGNING_KEY);
 
 // Indian numbers by default: 10 digits become +91XXXXXXXXXX.
 export function normalizePhone(raw: string): string {

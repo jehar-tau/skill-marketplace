@@ -26,7 +26,7 @@ export async function getDeviceId(): Promise<string> {
   if (deviceId) return deviceId;
   deviceId = await getItem('device_id');
   if (!deviceId) {
-    deviceId = Crypto.randomUUID();
+    deviceId = newId();
     await setItem('device_id', deviceId);
   }
   return deviceId;
@@ -94,7 +94,20 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   return json as T;
 }
 
-export const newId = () => Crypto.randomUUID();
+// Browsers only provide the built-in UUID function on https pages and localhost.
+// Opened over plain http on a home network it is missing, so build the id from
+// random bytes instead (which are available everywhere).
+export function newId(): string {
+  try {
+    return Crypto.randomUUID();
+  } catch {
+    const b = Crypto.getRandomBytes(16);
+    b[6] = (b[6]! & 0x0f) | 0x40;
+    b[8] = (b[8]! & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, '0'));
+    return `${h.slice(0, 4).join('')}-${h.slice(4, 6).join('')}-${h.slice(6, 8).join('')}-${h.slice(8, 10).join('')}-${h.slice(10).join('')}`;
+  }
+}
 export const platform = Platform.OS === 'android' ? 'android' : Platform.OS === 'ios' ? 'ios' : 'web';
 
 export async function saveServerAddress(url: string | null) {

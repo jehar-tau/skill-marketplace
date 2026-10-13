@@ -44,7 +44,6 @@ export function FindView({ reloadKey }: { reloadKey: number }) {
   if (!data) return null;
   return (
     <View style={{ gap: 12 }}>
-      <Txt size={14} weight="600" mute>{t.myRequests}</Txt>
       {data.length === 0 ? <Empty text={t.noRequests} /> : null}
       {data.map((r) => {
         const open = OPEN.includes(r.status);

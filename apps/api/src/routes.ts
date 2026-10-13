@@ -5,14 +5,20 @@ import {
   JobAnswerBody, MatchRespondBody, MediaUploadBody, OtpStartBody, OtpVerifyBody, ProviderSettingsBody, RatingBody, ReceiptBody,
   RefreshBody, ReportBody, SendMessageBody, UpdateMeBody, VerificationBody,
 } from '@sm/contracts';
-import { asrAvailable, config, conversations, identity, intake, matching, media, safety, trust } from '@sm/core';
+import { asrAvailable, config, conversations, identity, intake, matching, media, safety, trust, vapidKeys } from '@sm/core';
 import { requireAuth } from './server';
 
 const IdParams = z.object({ id: z.string().uuid() });
 const id = (req: FastifyRequest) => IdParams.parse(req.params).id;
 
 export function registerRoutes(app: FastifyInstance) {
-  app.get('/v1/config', async () => ({ voiceInput: asrAvailable(), termsVersion: config.termsVersion, locales: ['mr', 'hi', 'en'] }));
+  app.get('/v1/config', async () => ({
+    voiceInput: asrAvailable(),
+    termsVersion: config.termsVersion,
+    locales: ['mr', 'hi', 'en'],
+    // Public half of the browser push key; the web app needs it to subscribe.
+    webPushKey: (await vapidKeys()).publicKey,
+  }));
 
   // ---- sign-in
   app.post('/v1/auth/otp/start', async (req) => identity.startOtp(OtpStartBody.parse(req.body).phone, req.ip));
@@ -51,6 +57,12 @@ export function registerRoutes(app: FastifyInstance) {
       await intake.reviseCapability(req.actor, id(req), b.interpretationId);
       return { ok: true };
     });
+    r.get('/v1/capabilities/:id/proofs', async (req) => intake.listProofs(req.actor, id(req)));
+    r.post('/v1/capabilities/:id/proofs', async (req) => {
+      const b = z.object({ link: z.string().max(300).optional(), mediaAssetId: z.string().uuid().optional() }).parse(req.body);
+      return intake.addProof(req.actor, id(req), b);
+    });
+    r.delete('/v1/proofs/:id', async (req) => (await intake.removeProof(req.actor, id(req)), { ok: true }));
     r.get('/v1/provider/area', async (req) => ({ area: await intake.getServiceArea(req.actor) }));
     r.patch('/v1/provider/area', async (req) => {
       const b = z.object({
@@ -94,6 +106,12 @@ export function registerRoutes(app: FastifyInstance) {
     r.post('/v1/agreements/:id/answer', async (req) => trust.answerJob(req.actor, id(req), JobAnswerBody.parse(req.body).answer));
     r.post('/v1/agreements/:id/rate', async (req) => trust.rate(req.actor, id(req), RatingBody.parse(req.body)));
 
+    // ---- reviews waiting for this person, and their saved people
+    r.get('/v1/reviews/pending', async (req) => trust.pendingReviews(req.actor));
+    r.get('/v1/people', async (req) => conversations.listPeople(req.actor));
+    r.post('/v1/conversations/:id/save-person', async (req) => (await conversations.savePerson(req.actor, id(req)), { ok: true }));
+    r.delete('/v1/people/:id', async (req) => (await conversations.removePerson(req.actor, id(req)), { ok: true }));
+
     // ---- safety
     r.post('/v1/reports', async (req) => safety.report(req.actor, ReportBody.parse(req.body)));
     r.get('/v1/blocks', async (req) => safety.listBlocks(req.actor));
@@ -119,7 +137,7 @@ export function registerRoutes(app: FastifyInstance) {
     const p = z.object({ id: z.string().uuid(), variant: z.enum(['full', 'thumb']) }).parse(req.params);
     const q = Signed.parse(req.query);
     media.checkLocalSignature(`/v1/media/file/${p.id}/${p.variant}`, q.exp, q.sig);
-    const data = await media.readLocalFile(p.id, p.variant);
-    return reply.type('image/jpeg').header('cache-control', 'private, max-age=300').send(data);
+    const file = await media.readLocalFile(p.id, p.variant);
+    return reply.type(file.mime).header('cache-control', 'private, max-age=300').send(file.data);
   });
 }

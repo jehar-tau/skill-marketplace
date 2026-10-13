@@ -18,7 +18,7 @@ export const UpdateMeBody = z
   .object({ displayName: z.string().min(1).max(60), preferredLocale: LocaleZ })
   .partial();
 export const DeviceBody = z.object({
-  pushToken: z.string().max(400).nullable().optional(),
+  pushToken: z.string().max(2000).nullable().optional(),
   batteryExemptConfirmed: z.boolean().optional(),
 });
 export const ProviderSettingsBody = z

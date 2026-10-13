@@ -38,6 +38,8 @@ export function Composer({ purpose, onDone, revise, onCancelRevise }: {
   const [askPlace, setAskPlace] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // Browsers only allow the microphone on https pages (and localhost).
+  const canRecord = Platform.OS !== 'web' || (globalThis as { isSecureContext?: boolean }).isSecureContext !== false;
 
   async function interpret(body: { text?: string; audioAssetId?: string }) {
     setBusy(true);
@@ -94,7 +96,7 @@ export function Composer({ purpose, onDone, revise, onCancelRevise }: {
 
   async function confirm(place?: Place) {
     if (!result) return;
-    if (revise) {
+    if (revise?.id) {
       setConfirming(true);
       try {
         const chosen = result.drafts.find((d) => picked.has(d.interpretationId)) ?? result.drafts[0]!;
@@ -137,7 +139,7 @@ export function Composer({ purpose, onDone, revise, onCancelRevise }: {
   const canSend = text.trim().length > 1 && !busy;
   return (
     <View style={{ gap: 8 }}>
-      {revise ? (
+      {revise?.id ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ flex: 1 }}><Notice text={t.editingService} /></View>
           <Btn small kind="plain" label={t.cancel} onPress={() => onCancelRevise?.()} />
@@ -162,14 +164,14 @@ export function Composer({ purpose, onDone, revise, onCancelRevise }: {
             style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: th.accent, alignItems: 'center', justifyContent: 'center' }}>
             <Txt size={20} weight="700" color={th.accentInk}>↑</Txt>
           </Pressable>
-        ) : voiceInput ? (
+        ) : voiceInput && canRecord ? (
           <Pressable accessibilityRole="button" accessibilityLabel={recording ? t.listening : t.holdToTalk} onPress={toggleRecording}
             style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: recording ? th.warn : th.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
             <Txt size={18} color={recording ? '#fff' : th.accent}>{recording ? '■' : '🎤'}</Txt>
           </Pressable>
         ) : null}
       </View>
-      {!text && !recording && !busy ? <Txt size={13} mute style={{ paddingHorizontal: 8 }}>{purpose === 'request' ? t.needExample : t.offerExample}</Txt> : null}
+      {purpose === 'request' && !text && !recording && !busy ? <Txt size={13} mute style={{ paddingHorizontal: 8 }}>{t.needExample}</Txt> : null}
 
       <Sheet visible={!!result && !askPlace} onClose={() => setResult(null)}>
         {result ? (
@@ -189,7 +191,7 @@ export function Composer({ purpose, onDone, revise, onCancelRevise }: {
                 </Card>
               );
             })}
-            <Btn label={revise ? t.saveChange : purpose === 'request' ? t.confirmNeed : picked.size > 1 ? t.confirmOfferMany : t.confirmOffer} busy={confirming} disabled={picked.size === 0} onPress={() => confirm()} />
+            <Btn label={revise?.id ? t.saveChange : purpose === 'request' ? t.confirmNeed : picked.size > 1 ? t.confirmOfferMany : t.confirmOffer} busy={confirming} disabled={picked.size === 0} onPress={() => confirm()} />
             <Btn kind="plain" label={t.editText} onPress={() => { setText(result.originalText); setResult(null); }} />
           </>
         ) : null}

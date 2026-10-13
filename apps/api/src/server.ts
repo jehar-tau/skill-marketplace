@@ -2,10 +2,11 @@ import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { AppError, closePools, config, ROOT, identity, presenceKey, rateLimit, redis, startWorker, subscribe, type Actor } from '@sm/core';
+import { admin, AppError, closePools, config, ROOT, identity, presenceKey, rateLimit, redis, startWorker, subscribe, type Actor } from '@sm/core';
 import { registerAdminRoutes } from './admin';
 import { registerLegalRoutes } from './legal';
 import { registerRoutes } from './routes';
@@ -36,6 +37,8 @@ app.setErrorHandler((err, _req, reply) => {
   const status = (err as { statusCode?: number }).statusCode;
   if (status && status < 500) return reply.status(status).send({ error: 'bad_request', message: (err as Error).message });
   app.log.error(err);
+  // The route pattern, not the address, so ids never end up in the error list.
+  void admin.recordServerError(_req.method, _req.routeOptions?.url ?? 'unknown', (err as Error).message ?? 'error');
   return reply.status(500).send({ error: 'internal_error' });
 });
 
@@ -122,9 +125,37 @@ app.get('/v1/ws', { websocket: true }, (socket) => {
   });
 });
 
+// The web app, when it has been built (`pnpm build:web`), is served from the same
+// address as the API, so one URL is everything a tester needs.
+const webDir = join(ROOT, 'apps/mobile/dist');
+if (existsSync(join(webDir, 'index.html'))) {
+  await app.register(fastifyStatic, {
+    root: webDir,
+    wildcard: false,
+    // The page itself is served below, never from a cache, so a new build shows up at once.
+    index: false,
+    setHeaders(res, path) {
+      // Script and image files carry a fingerprint in their name and can be kept; the rest must stay fresh.
+      res.header('cache-control', path.includes('/_expo/') || path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+    },
+  });
+  const indexHtml = readFileSync(join(webDir, 'index.html'), 'utf8');
+  app.get('/', (_req, reply) => reply.type('text/html').header('cache-control', 'no-cache').send(indexHtml));
+  const RESERVED = /^\/(v1|admin|legal|health|app\.apk)(\/|$)/;
+  app.setNotFoundHandler((req, reply) => {
+    // Any other page address belongs to the app's own router.
+    if (req.method === 'GET' && !RESERVED.test(req.url) && !/\.[a-z0-9]{2,5}(\?|$)/i.test(req.url)) {
+      return reply.type('text/html').header('cache-control', 'no-cache').send(indexHtml);
+    }
+    return reply.status(404).send({ error: 'not_found' });
+  });
+  console.log('[api] serving the web app');
+}
+
 // One process is enough for local development; production runs apps/worker separately.
 let stopWorker: (() => Promise<void>) | null = null;
-if (!config.isProd && process.env.INLINE_WORKER !== 'false') {
+// A single small hosted instance (free staging) can also run the worker in-process with INLINE_WORKER=true.
+if (config.INLINE_WORKER ? config.INLINE_WORKER === 'true' : !config.isProd) {
   stopWorker = await startWorker();
   console.log('[api] background worker running in-process');
 }
