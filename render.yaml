@@ -43,20 +43,16 @@ services:
       - { key: PUSH_PROVIDER, value: expo }
       - { key: SUPPORT_EMAIL, sync: false }
 
-      # --- AI: Gemini for understanding and matching, Groq for voice
-      - { key: AI_INTERPRETER, value: openai_compat }
-      - { key: AI_LLM_BASE_URL, value: "https://generativelanguage.googleapis.com/v1beta/openai" }
-      - { key: AI_LLM_MODEL, value: gemini-3.5-flash-lite }
-      - { key: AI_LLM_API_KEY, sync: false }
-      - { key: AI_EMBEDDER, value: openai_compat }
-      - { key: AI_EMBED_BASE_URL, value: "https://generativelanguage.googleapis.com/v1beta/openai" }
-      - { key: AI_EMBED_MODEL, value: gemini-embedding-001 }
-      - { key: AI_EMBED_DIMS, value: "768" }
-      - { key: AI_EMBED_API_KEY, sync: false }
-      - { key: AI_ASR, value: openai_compat }
-      - { key: AI_ASR_BASE_URL, value: "https://api.groq.com/openai/v1" }
-      - { key: AI_ASR_MODEL, value: whisper-large-v3 }
-      - { key: AI_ASR_API_KEY, sync: false }
+      # --- AI with no outside service and no per-use cost:
+      #   understanding  built-in rules
+      #   matching       a 23 MB open model that runs inside this server
+      #   profiles       built-in rules, English chats only
+      # To use hosted models instead (better with Marathi and Hindi, can read photos),
+      # see SETUP.md Steps 1 and 2 and add those settings in the Environment tab.
+      - { key: AI_INTERPRETER, value: rules }
+      - { key: AI_EMBEDDER, value: minilm }
+      - { key: AI_LEARNER, value: rules }
+      - { key: AI_ASR, value: none }
 
       # --- Chat photos. "local" keeps them on the server's own disk, which a free
       # instance wipes whenever it restarts: fine for a first test. For photos that

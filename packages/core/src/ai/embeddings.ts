@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { config } from '../config';
+import { join } from 'node:path';
+import { config, ROOT } from '../config';
 
 export interface Embedder {
   modelKey: string;
@@ -77,9 +78,29 @@ function openAiCompatEmbedder(): Embedder {
   };
 }
 
+// A small open model (about 23 MB) that runs inside the server itself: no AI
+// service, no per-use cost, and nothing leaves the machine. It understands
+// English, which is enough here because every talent and request is stored with
+// an English rendering (canonical_en) alongside the person's own words.
+let extractor: Promise<(texts: string[], opts: object) => Promise<{ tolist(): number[][] }>> | null = null;
+const miniLmEmbedder: Embedder = {
+  modelKey: 'minilm_l6_384',
+  dims: 384,
+  defaultFloor: 0.35,
+  async embed(texts) {
+    extractor ??= (async () => {
+      const { pipeline, env } = await import('@huggingface/transformers');
+      env.cacheDir = join(ROOT, '.data/models');
+      return (await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'q8' })) as never;
+    })();
+    const run = await extractor;
+    return (await run(texts, { pooling: 'mean', normalize: true })).tolist();
+  },
+};
+
 let cached: Embedder | null = null;
 export function activeEmbedder(): Embedder {
-  cached ??= config.AI_EMBEDDER === 'openai_compat' ? openAiCompatEmbedder() : localEmbedder;
+  cached ??= config.AI_EMBEDDER === 'openai_compat' ? openAiCompatEmbedder() : config.AI_EMBEDDER === 'minilm' ? miniLmEmbedder : localEmbedder;
   return cached;
 }
 

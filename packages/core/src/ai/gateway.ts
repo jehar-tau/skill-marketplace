@@ -64,7 +64,7 @@ export async function embed(texts: string[]): Promise<{ vectors: number[][]; deg
   const embedder = activeEmbedder();
   try {
     const vectors = await embedder.embed(texts);
-    if (embedder.modelKey !== 'local_hash_256') await logRun('embed', 'openai_compat', embedder.modelKey, null, { count: texts.length }, 0, 'ok', started);
+    if (config.AI_EMBEDDER === 'openai_compat') await logRun('embed', 'openai_compat', embedder.modelKey, null, { count: texts.length }, 0, 'ok', started);
     return { vectors, degraded: false };
   } catch (e) {
     await logRun('embed', 'openai_compat', embedder.modelKey, null, {}, 0, 'error', started);
