@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { api } from '../lib/api';
 import { LOCALITIES } from '../lib/config';
 import { currentPlace, enablePush, notificationsGranted, openBatterySettings, pushPossible, savePlace } from '../lib/device';
@@ -8,13 +8,14 @@ import { formatWhen } from '../lib/i18n';
 import { getItem, setItem } from '../lib/storage';
 import { useTheme } from '../lib/theme';
 import { useApp, useLive } from '../state';
+import { ProofSheet } from './ProofSheet';
 import { Btn, Card, Chip, confirmAsk, Empty, errorText, Notice, Sheet, toast, TrustLine, Txt, type Trust } from '../ui';
 
 interface Lead {
   matchId: string; state: string; open: boolean; requestText: string; deadlineAt: string | null; distanceKm: number;
   requesterName: string | null; requesterTrust: Trust; capabilityText: string; conversationId: string | null;
 }
-interface Service { id: string; status: string; originalText: string; categoryLabel: string; trust: Trust }
+interface Service { id: string; status: string; originalText: string; categoryLabel: string; trust: Trust; proofLinks: number; proofPhotos: number }
 interface Summary {
   activeSkills: number; leadsThisWeek: number; leadsTotal: number; replied: number; missed: number; jobsDone: number;
   ratingAvg: number | null; searching: boolean;
@@ -43,6 +44,8 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
   const [pushOn, setPushOn] = useState(true);
   const [justLive, setJustLive] = useState(false);
   const [areaOpen, setAreaOpen] = useState(false);
+  const [proofFor, setProofFor] = useState<string | null>(null);
+  const [proofFirst, setProofFirst] = useState(false);
   const area = useLive<{ area: { serviceRadiusM: number } | null }>(() => api('/v1/provider/area'), [], [reloadKey]);
 
   async function saveArea(body: object) {
@@ -204,6 +207,9 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
           <Txt size={13} mute>{sv.categoryLabel}{sv.status === 'paused' ? ` · ${t.paused}` : ''}</Txt>
           <Txt size={16}>{sv.originalText}</Txt>
           <TrustLine trust={sv.trust} />
+          <Pressable accessibilityRole="button" onPress={() => { setProofFirst(false); setProofFor(sv.id); }} style={{ minHeight: 36, justifyContent: 'center' }}>
+            <Txt size={14} color={th.accent} weight="600">{sv.proofLinks + sv.proofPhotos > 0 ? t.proofCount(sv.proofLinks, sv.proofPhotos) : t.proofAdd}</Txt>
+          </Pressable>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Btn small kind="plain" label={t.edit} onPress={() => onEdit({ id: sv.id, text: sv.originalText })} />
             <Btn small kind="plain" label={sv.status === 'paused' ? t.resume : t.pause} onPress={() => patchService(sv.id, sv.status === 'paused' ? 'active' : 'paused')} />
@@ -233,12 +239,22 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
         </View>
       </Sheet>
 
+      <ProofSheet capabilityId={proofFor} firstTime={proofFirst} onClose={() => { setProofFor(null); void services.refresh(); }} />
+
       <Sheet visible={justLive} onClose={() => setJustLive(false)} title={`✓ ${t.liveTitle}`}>
         <Txt size={17} weight="600" color={th.accent}>{t.liveBody}</Txt>
         <Txt size={16}>① {t.next1}</Txt>
         <Txt size={16}>② {t.next2}</Txt>
         <Txt size={16}>③ {t.next3}</Txt>
-        <Btn label={t.gotIt} onPress={() => setJustLive(false)} />
+        <Btn label={t.gotIt} onPress={async () => {
+          setJustLive(false);
+          const first = services.data?.[0];
+          if (first && !(await getItem('asked_proof'))) {
+            void setItem('asked_proof', '1');
+            setProofFirst(true);
+            setProofFor(first.id);
+          }
+        }} />
       </Sheet>
     </View>
   );

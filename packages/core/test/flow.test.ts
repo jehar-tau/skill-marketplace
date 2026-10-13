@@ -129,6 +129,18 @@ describe('provider profile', () => {
     expect(caps[0]!.attributes.delivery).toBe(true);
     const stranger = await newUser('Nosy');
     await expectCode(intake.reviseCapability(stranger, capId!, draft.drafts[0]!.interpretationId), 'draft_not_found');
+
+    // Optional proof of work: links are tidied up, and only the owner can see or add them.
+    await intake.addProof(pro, capId!, { link: '@sweet.bakes_pune' });
+    const proofs = await intake.addProof(pro, capId!, { link: 'sweetbakes.in/gallery' });
+    expect(proofs.map((p) => p.url)).toEqual(['https://instagram.com/sweet.bakes_pune', 'https://sweetbakes.in/gallery']);
+    await expectCode(intake.addProof(pro, capId!, { link: 'not a link' }), 'bad_link');
+    await expectCode(intake.listProofs(stranger, capId!), 'capability_not_found');
+    await expectCode(intake.addProof(stranger, capId!, { link: 'evil.example' }), 'capability_not_found');
+    await expectCode(intake.removeProof(stranger, proofs[0]!.id), 'proof_not_found');
+    expect((await intake.listCapabilities(pro))[0]).toMatchObject({ proofLinks: 2, proofPhotos: 0 });
+    await intake.removeProof(pro, proofs[0]!.id);
+    expect(await intake.listProofs(pro, capId!)).toHaveLength(1);
   });
 });
 

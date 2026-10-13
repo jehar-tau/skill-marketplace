@@ -57,6 +57,12 @@ export function registerRoutes(app: FastifyInstance) {
       await intake.reviseCapability(req.actor, id(req), b.interpretationId);
       return { ok: true };
     });
+    r.get('/v1/capabilities/:id/proofs', async (req) => intake.listProofs(req.actor, id(req)));
+    r.post('/v1/capabilities/:id/proofs', async (req) => {
+      const b = z.object({ link: z.string().max(300).optional(), mediaAssetId: z.string().uuid().optional() }).parse(req.body);
+      return intake.addProof(req.actor, id(req), b);
+    });
+    r.delete('/v1/proofs/:id', async (req) => (await intake.removeProof(req.actor, id(req)), { ok: true }));
     r.get('/v1/provider/area', async (req) => ({ area: await intake.getServiceArea(req.actor) }));
     r.patch('/v1/provider/area', async (req) => {
       const b = z.object({
