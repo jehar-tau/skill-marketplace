@@ -70,7 +70,7 @@ export async function createUpload(actor: Actor, body: { kind: 'image' | 'audio'
     }
     return tx.one(
       `INSERT INTO media_assets(owner_id, conversation_id, kind, object_key, mime, bytes, expires_at)
-       VALUES ($1, $2, $3, 'pending', $4, $5, CASE WHEN $3 = 'audio' THEN now() + interval '1 hour' END) RETURNING id`,
+       VALUES ($1, $2, $3, 'pending', $4, $5, CASE WHEN $3 = 'audio' AND $2::uuid IS NULL THEN now() + interval '1 hour' END) RETURNING id`,
       [actor.accountId, body.conversationId ?? null, body.kind, mime, body.bytes],
     );
   });
@@ -148,8 +148,15 @@ export async function processImage(assetId: string) {
 
 export async function getMediaUrls(actor: Actor, assetId: string) {
   // Row-level security limits this to the owner and the participants of its conversation.
-  const asset = await asActor(actor.accountId, (tx) => tx.maybeOne(`SELECT * FROM media_assets WHERE id = $1 AND kind = 'image'`, [assetId]));
+  const asset = await asActor(actor.accountId, (tx) => tx.maybeOne(`SELECT * FROM media_assets WHERE id = $1 AND (kind = 'image' OR conversation_id IS NOT NULL)`, [assetId]));
   if (!asset) throw notFound();
+  if (asset.kind === 'audio') {
+    if (asset.scan_state !== 'clean') return { state: asset.scan_state as string, url: null, thumbUrl: null };
+    const url = config.MEDIA_STORAGE === 's3'
+      ? await getSignedUrl(s3Client(), new GetObjectCommand({ Bucket: config.S3_BUCKET!, Key: asset.object_key }), { expiresIn: URL_TTL_SEC })
+      : signedLocalUrl(`/v1/media/file/${assetId}/full`);
+    return { state: 'clean', url, thumbUrl: null };
+  }
   if (asset.scan_state !== 'clean') return { state: asset.scan_state as string, url: null, thumbUrl: null };
   if (config.MEDIA_STORAGE === 's3') {
     const sign = (Key: string) => getSignedUrl(s3Client(), new GetObjectCommand({ Bucket: config.S3_BUCKET!, Key }), { expiresIn: URL_TTL_SEC });
@@ -162,16 +169,19 @@ export async function getMediaUrls(actor: Actor, assetId: string) {
   };
 }
 
-export async function readLocalFile(assetId: string, variant: string): Promise<Buffer> {
-  const asset = await asSystem((tx) => tx.maybeOne(`SELECT * FROM media_assets WHERE id = $1 AND scan_state = 'clean' AND kind = 'image'`, [assetId]));
+export async function readLocalFile(assetId: string, variant: string): Promise<{ data: Buffer; mime: string }> {
+  const asset = await asSystem((tx) =>
+    tx.maybeOne(`SELECT * FROM media_assets WHERE id = $1 AND scan_state = 'clean' AND (kind = 'image' OR conversation_id IS NOT NULL)`, [assetId]),
+  );
   if (!asset) throw notFound();
-  return readObject(variant === 'thumb' ? asset.thumb_key : asset.object_key);
+  if (asset.kind === 'audio') return { data: await readObject(asset.object_key), mime: asset.mime };
+  return { data: await readObject(variant === 'thumb' ? asset.thumb_key : asset.object_key), mime: 'image/jpeg' };
 }
 
 // Voice clips are deleted once transcribed; nothing is retained without separate consent (spec §10).
 export async function takeAudio(actor: Actor, assetId: string): Promise<{ data: Buffer; mime: string }> {
   const asset = await asActor(actor.accountId, (tx) =>
-    tx.maybeOne(`SELECT * FROM media_assets WHERE id = $1 AND owner_id = $2 AND kind = 'audio' AND scan_state = 'clean'`, [assetId, actor.accountId]),
+    tx.maybeOne(`SELECT * FROM media_assets WHERE id = $1 AND owner_id = $2 AND kind = 'audio' AND scan_state = 'clean' AND conversation_id IS NULL`, [assetId, actor.accountId]),
   );
   if (!asset) throw notFound('audio_not_found');
   const data = await readObject(asset.object_key);

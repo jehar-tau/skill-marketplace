@@ -264,6 +264,7 @@ export async function deleteAccountTx(tx: Tx, accountId: string, by: { id: strin
   await tx.exec(`UPDATE media_assets SET scan_state = 'rejected' WHERE owner_id = $1`, [accountId]);
   await tx.exec(`DELETE FROM verifications WHERE account_id = $1`, [accountId]);
   await tx.exec(`DELETE FROM capability_proofs WHERE account_id = $1`, [accountId]);
+  await tx.exec(`DELETE FROM saved_people WHERE owner_id = $1 OR person_id = $1`, [accountId]);
   await tx.exec(`UPDATE conversations SET status = 'closed' WHERE requester_id = $1 OR provider_id = $1`, [accountId]);
   await emit(tx, 'account.deleted', 'account', accountId);
   await audit(tx, by, 'account.delete', 'account', accountId);

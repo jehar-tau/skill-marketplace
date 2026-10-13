@@ -106,6 +106,12 @@ export function registerRoutes(app: FastifyInstance) {
     r.post('/v1/agreements/:id/answer', async (req) => trust.answerJob(req.actor, id(req), JobAnswerBody.parse(req.body).answer));
     r.post('/v1/agreements/:id/rate', async (req) => trust.rate(req.actor, id(req), RatingBody.parse(req.body)));
 
+    // ---- reviews waiting for this person, and their saved people
+    r.get('/v1/reviews/pending', async (req) => trust.pendingReviews(req.actor));
+    r.get('/v1/people', async (req) => conversations.listPeople(req.actor));
+    r.post('/v1/conversations/:id/save-person', async (req) => (await conversations.savePerson(req.actor, id(req)), { ok: true }));
+    r.delete('/v1/people/:id', async (req) => (await conversations.removePerson(req.actor, id(req)), { ok: true }));
+
     // ---- safety
     r.post('/v1/reports', async (req) => safety.report(req.actor, ReportBody.parse(req.body)));
     r.get('/v1/blocks', async (req) => safety.listBlocks(req.actor));
@@ -131,7 +137,7 @@ export function registerRoutes(app: FastifyInstance) {
     const p = z.object({ id: z.string().uuid(), variant: z.enum(['full', 'thumb']) }).parse(req.params);
     const q = Signed.parse(req.query);
     media.checkLocalSignature(`/v1/media/file/${p.id}/${p.variant}`, q.exp, q.sig);
-    const data = await media.readLocalFile(p.id, p.variant);
-    return reply.type('image/jpeg').header('cache-control', 'private, max-age=300').send(data);
+    const file = await media.readLocalFile(p.id, p.variant);
+    return reply.type(file.mime).header('cache-control', 'private, max-age=300').send(file.data);
   });
 }

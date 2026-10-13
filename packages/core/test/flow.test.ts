@@ -279,11 +279,14 @@ describe('agreement, confirmation and ratings', () => {
     expect((await matching.getRequest(client, requestId)).status).toBe('agreed');
     expect((await matchesFor(requestId)).find((m) => m.id === theirs.id)!.state).toBe('filled');
 
+    // The job's time has passed: both are asked whether it happened.
+    expect((await trust.pendingReviews(pro))[0]).toMatchObject({ agreementId: proposed.id, need: 'answer', iAmProvider: true });
     await trust.answerJob(client, proposed.id, 'yes');
     expect((await trust.getAgreement(pro, conversationId!))!.state).toBe('confirmed');
     await trust.answerJob(pro, proposed.id, 'yes');
     expect((await trust.getAgreement(pro, conversationId!))!.state).toBe('completed');
 
+    expect((await trust.pendingReviews(client))[0]).toMatchObject({ need: 'rate', iAmProvider: false });
     await trust.rate(client, proposed.id, { stars: 5, tags: ['on time'] });
     await expectCode(trust.rate(client, proposed.id, { stars: 1 }), 'already_rated');
     // One-sided rating: not visible, and the trust line has not moved.
@@ -295,6 +298,16 @@ describe('agreement, confirmation and ratings', () => {
     expect((await trust.getAgreement(pro, conversationId!))!.theirRating!.stars).toBe(5);
     caps = await intake.listCapabilities(pro);
     expect(caps.find((c) => c.id === capId)!.trust).toMatchObject({ completedJobs: 1, ratingCount: 1, ratingAvg: 5 });
+    // A finished job puts each on the other's list, labelled the right way round.
+    const mine2 = await conversations.listPeople(client);
+    expect(mine2).toHaveLength(1);
+    expect(mine2[0]).toMatchObject({ personId: pro.accountId, relation: 'provider', fromJob: true });
+    expect(mine2[0]!.talent).toContain('electrician');
+    expect((await conversations.listPeople(pro))[0]).toMatchObject({ personId: client.accountId, relation: 'customer', talent: null });
+    await conversations.removePerson(client, pro.accountId);
+    expect(await conversations.listPeople(client)).toHaveLength(0);
+    expect(await trust.pendingReviews(client)).toHaveLength(0);
+
     // The responder trust line the next requester sees carries the rating.
     expect((await matching.getRequest(client, requestId)).responders.find((r) => r.matchId === mine.id)!.trust.ratingAvg).toBe(5);
   });

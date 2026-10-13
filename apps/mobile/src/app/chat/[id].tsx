@@ -1,3 +1,4 @@
+import { createAudioPlayer, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,7 +20,7 @@ interface Msg {
 interface Pending { clientMessageId: string; body: string }
 interface Conv {
   id: string; status: string; role: 'requester' | 'provider'; other: { id: string; displayName: string | null; trust: Trust };
-  requestText: string; requestStatus: string; lastSeq: number; theirReadSeq: number; iSharedNumber: boolean; blocked: boolean;
+  requestText: string; requestStatus: string; lastSeq: number; theirReadSeq: number; iSharedNumber: boolean; blocked: boolean; saved: boolean;
 }
 
 const REASONS = ['harassment', 'fraud', 'no_show', 'unsafe', 'spam', 'other'] as const;
@@ -44,6 +45,36 @@ function Photo({ assetId }: { assetId: string }) {
   return <Image source={{ uri: url }} style={{ width: 220, height: 220, borderRadius: 10 }} resizeMode="cover" accessibilityLabel={t.photo} />;
 }
 
+function VoiceNote({ assetId, mine }: { assetId: string; mine: boolean }) {
+  const th = useTheme();
+  const { t } = useApp();
+  const [playing, setPlaying] = useState(false);
+  async function play() {
+    try {
+      const res = await api(`/v1/media/${assetId}`);
+      if (!res?.url) return;
+      const player = createAudioPlayer({ uri: res.url });
+      setPlaying(true);
+      player.addListener('playbackStatusUpdate', (st: { didJustFinish?: boolean }) => {
+        if (st.didJustFinish) {
+          setPlaying(false);
+          player.remove();
+        }
+      });
+      player.play();
+    } catch {
+      setPlaying(false);
+    }
+  }
+  const ink = mine ? th.bubbleMineInk : th.ink;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${t.play}: ${t.voiceNote}`} onPress={play} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40, minWidth: 150 }}>
+      <Txt size={22} color={ink}>{playing ? '🔊' : '▶'}</Txt>
+      <Txt size={15} color={ink}>{t.voiceNote}</Txt>
+    </Pressable>
+  );
+}
+
 export default function Chat() {
   const th = useTheme();
   const insets = useSafeAreaInsets();
@@ -59,6 +90,9 @@ export default function Chat() {
   const flushing = useRef(false);
   const listRef = useRef<FlatList<any>>(null);
   const outboxKey = `outbox.${id}`;
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [recording, setRecording] = useState(false);
+  const canRecord = Platform.OS !== 'web' || (globalThis as { isSecureContext?: boolean }).isSecureContext !== false;
 
   const conv = useLive<Conv>(() => api(`/v1/conversations/${id}`), ['conversation', 'receipt', 'agreement'], [id]);
   const agreement = useLive<{ agreement: Agreement | null }>(() => api(`/v1/conversations/${id}/agreement`), ['agreement'], [id]);
@@ -125,6 +159,36 @@ export default function Chat() {
     void flush();
   }
 
+  async function toggleVoice() {
+    try {
+      if (!recording) {
+        const perm = await requestRecordingPermissionsAsync();
+        if (!perm.granted) return toast(t.voiceUnavailable);
+        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+        await recorder.prepareToRecordAsync();
+        recorder.record();
+        setRecording(true);
+        // Voice notes are capped at two minutes.
+        setTimeout(() => recorder.isRecording && void toggleVoice(), 120_000);
+        return;
+      }
+      setRecording(false);
+      await recorder.stop();
+      if (!recorder.uri) return;
+      const blob = await (await fetch(recorder.uri)).blob();
+      const mime = (blob.type || (Platform.OS === 'web' ? 'audio/webm' : 'audio/mp4')).split(';')[0]!;
+      const up = await api('/v1/media', { body: { kind: 'audio', mime, bytes: blob.size, conversationId: id } });
+      const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'content-type': mime }, body: blob });
+      if (!put.ok) throw new Error('upload');
+      if (up.needsComplete) await api(`/v1/media/${up.assetId}/complete`, { method: 'POST' });
+      await api(`/v1/conversations/${id}/messages`, { body: { clientMessageId: newId(), mediaAssetId: up.assetId } });
+      await pull();
+    } catch (e) {
+      setRecording(false);
+      toast(errorText(e, t));
+    }
+  }
+
   async function sendPhoto() {
     setMenu(false);
     try {
@@ -184,6 +248,7 @@ export default function Chat() {
       <View style={{ marginVertical: 3 }}>
         <View style={{ alignSelf: m.mine ? 'flex-end' : 'flex-start', maxWidth: '82%', backgroundColor: m.mine ? th.bubbleMine : th.bubbleTheirs, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 9, borderWidth: m.mine ? 0 : 1, borderColor: th.line }}>
           {m.kind === 'image' && m.meta.mediaAssetId ? <Photo assetId={m.meta.mediaAssetId} /> : null}
+          {m.kind === 'audio' && m.meta.mediaAssetId ? <VoiceNote assetId={m.meta.mediaAssetId} mine={m.mine} /> : null}
           {m.body ? <Txt color={m.mine ? th.bubbleMineInk : th.ink}>{m.body}</Txt> : null}
           {seen ? <Txt size={11} color={th.bubbleMineInk} style={{ textAlign: 'right' }}>✓✓</Txt> : null}
         </View>
@@ -224,12 +289,23 @@ export default function Chat() {
 
         {c?.blocked ? <View style={{ padding: 12 }}><Notice tone="warn" text={t.blockedNotice} /></View> : (
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, paddingBottom: insets.bottom + 10, borderTopWidth: 1, borderTopColor: th.line }}>
-            <TextInput value={text} onChangeText={setText} placeholder={t.typeMessage} placeholderTextColor={th.mute} multiline editable={!closed} accessibilityLabel={t.typeMessage}
-              style={{ flex: 1, backgroundColor: th.card, borderRadius: 22, borderWidth: 1, borderColor: th.line, paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, lineHeight: 24, color: th.ink, maxHeight: 120 }} />
-            <Pressable accessibilityRole="button" accessibilityLabel={t.send} disabled={!text.trim() || closed} onPress={send}
-              style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: th.accent, alignItems: 'center', justifyContent: 'center', opacity: text.trim() && !closed ? 1 : 0.4 }}>
-              <Txt size={20} weight="700" color={th.accentInk}>↑</Txt>
+            <Pressable accessibilityRole="button" accessibilityLabel={t.photo} disabled={closed || recording} onPress={sendPhoto}
+              style={{ width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', opacity: closed ? 0.4 : 1 }}>
+              <Txt size={22}>📷</Txt>
             </Pressable>
+            <TextInput value={recording ? t.listening : text} onChangeText={setText} placeholder={t.typeMessage} placeholderTextColor={th.mute} multiline editable={!closed && !recording} accessibilityLabel={t.typeMessage}
+              style={{ flex: 1, backgroundColor: th.card, borderRadius: 22, borderWidth: 1, borderColor: recording ? th.warn : th.line, paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, lineHeight: 24, color: recording ? th.warn : th.ink, maxHeight: 120 }} />
+            {text.trim() || !canRecord ? (
+              <Pressable accessibilityRole="button" accessibilityLabel={t.send} disabled={!text.trim() || closed} onPress={send}
+                style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: th.accent, alignItems: 'center', justifyContent: 'center', opacity: text.trim() && !closed ? 1 : 0.4 }}>
+                <Txt size={20} weight="700" color={th.accentInk}>↑</Txt>
+              </Pressable>
+            ) : (
+              <Pressable accessibilityRole="button" accessibilityLabel={recording ? t.stopRecording : t.recordVoice} disabled={closed} onPress={toggleVoice}
+                style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: recording ? th.warn : th.accentSoft, alignItems: 'center', justifyContent: 'center', opacity: closed ? 0.4 : 1 }}>
+                <Txt size={18} color={recording ? '#fff' : th.accent}>{recording ? '■' : '🎤'}</Txt>
+              </Pressable>
+            )}
           </View>
         )}
       </View>
@@ -238,7 +314,10 @@ export default function Chat() {
         {c && !c.iSharedNumber && !closed ? (
           <Btn label={t.shareNumber} onPress={() => { setMenu(false); confirmAsk(t.shareNumberConfirm, t.share, t.cancel, async () => { await api(`/v1/conversations/${id}/share-number`, { method: 'POST' }).catch((e) => toast(errorText(e, t))); void pull(); void conv.refresh(); }); }} />
         ) : null}
-        {!closed ? <Btn kind="plain" label={t.photo} onPress={sendPhoto} /> : null}
+        {c ? (
+          <Btn kind="plain" label={c.saved ? t.removePersonLabel : t.savePersonLabel}
+            onPress={async () => { setMenu(false); await (c.saved ? api(`/v1/people/${c.other.id}`, { method: 'DELETE' }) : api(`/v1/conversations/${id}/save-person`, { method: 'POST' })).catch((e) => toast(errorText(e, t))); void conv.refresh(); }} />
+        ) : null}
         <Btn kind="plain" label={t.report} onPress={() => { setMenu(false); setReporting(true); }} />
         {c ? (
           <Btn kind="danger" label={c.blocked ? t.unblock : t.block}
