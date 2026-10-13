@@ -58,7 +58,7 @@ function Home({ role }: { role: 'find' | 'offer' }) {
         </ScrollView>
 
         <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: insets.bottom + 10, borderTopWidth: 1, borderTopColor: th.line, backgroundColor: th.bg }}>
-          <Composer key={revise?.id ?? 'new'} purpose={role === 'offer' ? 'capability' : 'request'} revise={revise} onCancelRevise={() => setRevise(null)}
+          <Composer key={revise ? `${revise.id}:${revise.text}` : 'new'} purpose={role === 'offer' ? 'capability' : 'request'} revise={revise} onCancelRevise={() => setRevise(null)}
             onDone={() => { setRevise(null); setReloadKey((k) => k + 1); }} />
         </View>
       </View>

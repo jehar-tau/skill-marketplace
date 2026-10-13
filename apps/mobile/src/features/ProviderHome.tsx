@@ -106,22 +106,18 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
 
   if (count === null) return null;
 
-  // ---- First visit: nothing described yet.
+  // ---- First visit: one question, nothing else.
   if (!hasService) {
     return (
-      <View style={{ gap: 14 }}>
-        <Txt size={26} weight="800">{t.welcomeTitle}</Txt>
-        <Txt size={16} mute>{t.welcomeBody}</Txt>
-        {[t.ex1, t.ex2, t.ex3].map((ex) => (
-          <Card key={ex} style={{ backgroundColor: th.accentSoft, borderColor: 'transparent' }}>
-            <Txt size={16} style={{ fontStyle: 'italic' }}>“{ex}”</Txt>
+      <View style={{ gap: 16, paddingTop: 24 }}>
+        <Txt size={30} weight="800" style={{ lineHeight: 40 }}>{t.welcomeTitle}</Txt>
+        <Txt size={17} mute>{t.welcomeBody}</Txt>
+        <Txt size={14} mute style={{ marginTop: 12 }}>{t.tryOne}</Txt>
+        {t.starters.map((ex) => (
+          <Card key={ex} onPress={() => onEdit({ id: '', text: ex })} style={{ backgroundColor: th.accentSoft, borderColor: 'transparent' }}>
+            <Txt size={16}>{ex}</Txt>
           </Card>
         ))}
-        <View style={{ gap: 6, marginTop: 4 }}>
-          <Txt size={15}>① {t.provPromise2}</Txt>
-          <Txt size={15}>② {t.provPromise3}</Txt>
-        </View>
-        <Txt size={14} mute>{t.freeLine}</Txt>
       </View>
     );
   }
@@ -167,13 +163,6 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
           </View>
         </Card>
       ) : null}
-      {me && !me.displayName ? (
-        <Card>
-          <Txt size={15}>{t.tipName}</Txt>
-          <Btn small kind="soft" label={t.addName} onPress={onNeedName} style={{ alignSelf: 'flex-start' }} />
-        </Card>
-      ) : null}
-
       <Txt size={14} weight="600" mute style={{ marginTop: 4 }}>{t.leads}</Txt>
       {openLeads.length === 0 && answered.length === 0 ? <Empty text={t.noLeads} /> : null}
       {openLeads.map((m) => (
@@ -211,7 +200,6 @@ export function ProviderHome({ reloadKey, onNeedName, onEdit }: {
           </View>
         </Card>
       ))}
-      <Txt size={14} mute>{t.tipMore}</Txt>
 
       <Txt size={14} weight="600" mute style={{ marginTop: 6 }}>{t.yourArea}</Txt>
       <Card>
