@@ -244,7 +244,8 @@ The app can run without any AI service:
 | Understanding what people say | Built-in keyword rules for Marathi, Hindi and English | None |
 | Matching a request to a talent | A 23 MB open model (all-MiniLM-L6) that runs inside the server | None |
 | Building profiles from chats | Built-in patterns; **English chats only**, other languages are skipped | None |
-| Voice input, reading photos | Not available in this mode | — |
+| Voice input | The phone or browser turns speech into text itself (open-source `expo-speech-recognition`) | Works in Chrome, Edge and Safari and in the Android and iOS apps; not in Firefox. The words appear in the box to check before sending |
+| Reading photos | Not available in this mode | — |
 
 Settings: `AI_INTERPRETER=rules`, `AI_EMBEDDER=minilm`, `AI_LEARNER=rules`, `AI_ASR=none`. After changing the matching model run `pnpm db:migrate` and `pnpm db:reembed`.
 
