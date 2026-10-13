@@ -45,6 +45,13 @@
         }
       ],
       [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "The microphone is used when you choose to speak instead of typing, and for voice notes in chats.",
+          "speechRecognitionPermission": "Your speech is turned into text so you do not have to type."
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "The microphone is used only while you hold the record button, to hear what you need or offer."
