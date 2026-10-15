@@ -1,6 +1,6 @@
 # Skill Marketplace
 
-Two views — **Find Help** and **Offer Help** — where people say what they need or what they can do, in Marathi, Hindi or English, and nearby matches are told. Built to [Skill_Marketplace_Spec_v0.5.md](Skill_Marketplace_Spec_v0.5.md).
+A phone-first app that helps people turn a talent into a second income: they say what they are good at, in Marathi, Hindi or English, and nearby people who need it are matched to them. Three tabs — My profile, Find help, Messages. Specification: [Skill_Marketplace_Spec_v0.6.md](Skill_Marketplace_Spec_v0.6.md).
 
 ## What is here
 
