@@ -150,6 +150,9 @@ function capabilityView(r: Record<string, any>) {
     trust: trustLine({ ...r, verified: r.verified }),
     proofLinks: Number(r.proof_links ?? 0),
     proofPhotos: Number(r.proof_photos ?? 0),
+    proofs: ((r.proofs ?? []) as Record<string, any>[]).map((p) => ({ id: p.id as string, kind: p.kind as 'link' | 'photo', url: p.url as string | null, mediaAssetId: p.media_asset_id as string | null })),
+    experience: (r.experience ?? null) as 'business' | 'informal' | 'new' | null,
+    experienceNote: (r.experience_note ?? null) as string | null,
     createdAt: r.created_at as Date,
   };
 }
@@ -174,6 +177,8 @@ export async function listCapabilities(actor: Actor) {
               ct.completed_jobs, ct.rating_avg, ct.rating_count,
               (SELECT count(*) FROM capability_proofs p WHERE p.capability_id = c.id AND p.kind = 'link') AS proof_links,
               (SELECT count(*) FROM capability_proofs p WHERE p.capability_id = c.id AND p.kind = 'photo') AS proof_photos,
+              (SELECT coalesce(json_agg(json_build_object('id', p.id, 'kind', p.kind, 'url', p.url, 'media_asset_id', p.media_asset_id) ORDER BY p.created_at), '[]')
+                 FROM capability_proofs p WHERE p.capability_id = c.id) AS proofs,
               EXISTS (SELECT 1 FROM verifications v WHERE v.account_id = c.account_id AND v.kind = 'udyam' AND v.state = 'verified') AS verified
        FROM capabilities c JOIN capability_versions cv ON cv.id = c.current_version_id
        JOIN service_categories sc ON sc.id = c.category_id LEFT JOIN capability_trust ct ON ct.capability_id = c.id
@@ -184,12 +189,21 @@ export async function listCapabilities(actor: Actor) {
   });
 }
 
-export async function patchCapability(actor: Actor, id: string, patch: { status?: 'active' | 'paused' | 'removed'; serviceRadiusM?: number }) {
+export async function patchCapability(
+  actor: Actor,
+  id: string,
+  patch: { status?: 'active' | 'paused' | 'removed'; serviceRadiusM?: number; experience?: 'business' | 'informal' | 'new' | null; experienceNote?: string | null },
+) {
   await asActor(actor.accountId, async (tx) => {
+    // experience fields: undefined leaves them alone, null clears them.
     const row = await tx.maybeOne(
-      `UPDATE capabilities SET status = COALESCE($3, status), service_radius_m = COALESCE($4, service_radius_m), updated_at = now()
+      `UPDATE capabilities SET status = COALESCE($3, status), service_radius_m = COALESCE($4, service_radius_m),
+              experience = CASE WHEN $5 THEN $6 ELSE experience END,
+              experience_note = CASE WHEN $7 THEN $8 ELSE experience_note END, updated_at = now()
        WHERE id = $1 AND account_id = $2 AND status <> 'removed' RETURNING id, status, cell_id`,
-      [id, actor.accountId, patch.status ?? null, patch.serviceRadiusM ?? null],
+      [id, actor.accountId, patch.status ?? null, patch.serviceRadiusM ?? null,
+        patch.experience !== undefined, patch.experience ?? null,
+        patch.experienceNote !== undefined, patch.experienceNote ? patch.experienceNote : null],
     );
     if (!row) throw notFound('capability_not_found');
     if (patch.status === 'active') await emit(tx, 'capability.activated', 'capability', id, {}, row.cell_id);
@@ -369,6 +383,13 @@ export async function removeProof(actor: Actor, proofId: string) {
   await asActor(actor.accountId, async (tx) => {
     const p = await tx.maybeOne(`DELETE FROM capability_proofs WHERE id = $1 AND account_id = $2 RETURNING media_asset_id`, [proofId, actor.accountId]);
     if (!p) throw notFound('proof_not_found');
-    if (p.media_asset_id) await tx.exec(`UPDATE media_assets SET scan_state = 'rejected' WHERE id = $1 AND owner_id = $2`, [p.media_asset_id, actor.accountId]);
+    // One photo can back several businesses described together; keep it while any still uses it.
+    if (p.media_asset_id) {
+      await tx.exec(
+        `UPDATE media_assets SET scan_state = 'rejected' WHERE id = $1 AND owner_id = $2
+           AND NOT EXISTS (SELECT 1 FROM capability_proofs WHERE media_asset_id = $1)`,
+        [p.media_asset_id, actor.accountId],
+      );
+    }
   });
 }

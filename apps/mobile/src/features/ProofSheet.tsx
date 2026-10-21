@@ -2,13 +2,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import { api } from '../lib/api';
+import { mediaUrl } from '../lib/config';
+import { uploadImage } from '../lib/media';
 import { useTheme } from '../lib/theme';
 import { useApp } from '../state';
 import { Btn, errorText, Field, Notice, Sheet, Txt } from '../ui';
 
 interface Proof { id: string; kind: 'link' | 'photo'; url: string | null; mediaAssetId: string | null }
 
-function Thumb({ assetId }: { assetId: string }) {
+export function Thumb({ assetId, size = 84 }: { assetId: string; size?: number }) {
   const th = useTheme();
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -18,13 +20,13 @@ function Thumb({ assetId }: { assetId: string }) {
     const poll = async () => {
       const res = await api(`/v1/media/${assetId}`).catch(() => null);
       if (!alive) return;
-      if (res?.thumbUrl) setUrl(res.thumbUrl);
+      if (res?.thumbUrl) setUrl(mediaUrl(res.thumbUrl));
       else if (res?.state !== 'rejected' && tries++ < 12) setTimeout(poll, 1500);
     };
     void poll();
     return () => { alive = false; };
   }, [assetId]);
-  return url ? <Image source={{ uri: url }} style={{ width: 84, height: 84, borderRadius: 12 }} /> : <View style={{ width: 84, height: 84, borderRadius: 12, backgroundColor: th.line }} />;
+  return url ? <Image source={{ uri: url }} style={{ width: size, height: size, borderRadius: 12 }} /> : <View style={{ width: size, height: size, borderRadius: 12, backgroundColor: th.line }} />;
 }
 
 // Optional proof of work for one talent. Always skippable, and worded so that
@@ -67,13 +69,8 @@ export function ProofSheet({ capabilityId, firstTime, onClose }: { capabilityId:
       setBusy('photo');
       let latest = proofs;
       for (const asset of pick.assets) {
-        const blob = await (await fetch(asset.uri)).blob();
-        const mime = (asset.mimeType ?? blob.type ?? 'image/jpeg').split(';')[0]!;
-        const up = await api('/v1/media', { body: { kind: 'image', mime, bytes: blob.size } });
-        const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'content-type': mime }, body: blob });
-        if (!put.ok) throw new Error('upload');
-        if (up.needsComplete) await api(`/v1/media/${up.assetId}/complete`, { method: 'POST' });
-        latest = await api(`/v1/capabilities/${capabilityId}/proofs`, { body: { mediaAssetId: up.assetId } });
+        const assetId = await uploadImage(asset.uri, asset.mimeType);
+        latest = await api(`/v1/capabilities/${capabilityId}/proofs`, { body: { mediaAssetId: assetId } });
         setProofs(latest);
       }
     } catch (e) {

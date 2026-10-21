@@ -74,7 +74,12 @@ export const ConfirmRequestBody = z.object({
   location: LocationZ,
 });
 export const CapabilityPatchBody = z
-  .object({ status: z.enum(['active', 'paused', 'removed']), serviceRadiusM: z.number().int().min(500).max(50000) })
+  .object({
+    status: z.enum(['active', 'paused', 'removed']),
+    serviceRadiusM: z.number().int().min(500).max(50000),
+    experience: z.enum(['business', 'informal', 'new']).nullable(),
+    experienceNote: z.string().trim().max(500).nullable(),
+  })
   .partial();
 
 // --- Matching
