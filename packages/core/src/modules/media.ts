@@ -48,9 +48,11 @@ export async function deleteObject(key: string) {
   await rm(localPath(key), { force: true });
 }
 
+// Relative on purpose: each app joins it to the server address it already uses, so files keep
+// working when that address changes (a new tunnel, a new domain) without touching server settings.
 function signedLocalUrl(path: string) {
   const exp = Math.floor(Date.now() / 1000) + URL_TTL_SEC;
-  return `${config.PUBLIC_BASE_URL}${path}?exp=${exp}&sig=${signMedia(`${path}:${exp}`)}`;
+  return `${path}?exp=${exp}&sig=${signMedia(`${path}:${exp}`)}`;
 }
 
 export function checkLocalSignature(path: string, exp: string | undefined, sig: string | undefined) {

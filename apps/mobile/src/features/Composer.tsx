@@ -1,11 +1,11 @@
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, TextInput, View } from 'react-native';
 import { api } from '../lib/api';
 import { currentPlace, savedPlace, savePlace, type Place } from '../lib/device';
-import { LOCALITIES } from '../lib/config';
+import { LOCALITIES, mediaUrl } from '../lib/config';
 import { useTheme } from '../lib/theme';
+import { useDictation } from '../lib/useDictation';
 import { useApp } from '../state';
 import { Btn, Card, Chip, errorText, Notice, Sheet, Txt } from '../ui';
 
@@ -16,21 +16,10 @@ async function uploadClip(uri: string): Promise<string> {
   const blob = await (await fetch(uri)).blob();
   const mime = (blob.type || (Platform.OS === 'web' ? 'audio/webm' : 'audio/mp4')).split(';')[0]!;
   const up = await api('/v1/media', { body: { kind: 'audio', mime, bytes: blob.size } });
-  const res = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'content-type': mime }, body: blob });
+  const res = await fetch(mediaUrl(up.uploadUrl), { method: 'PUT', headers: { 'content-type': mime }, body: blob });
   if (!res.ok) throw Object.assign(new Error('upload'), { code: 'asr_unavailable' });
   if (up.needsComplete) await api(`/v1/media/${up.assetId}/complete`, { method: 'POST' });
   return up.assetId;
-}
-
-// Speech is turned into text by the phone or browser itself where it can be: free, nothing for the
-// server to run, and the person sees the words before sending. The server transcriber is the fallback.
-const SPEECH_LANG = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN' } as const;
-function deviceSpeech(): boolean {
-  try {
-    return ExpoSpeechRecognitionModule.isRecognitionAvailable();
-  } catch {
-    return false;
-  }
 }
 
 // The single input for both views: type or speak, then approve what was understood (spec §5.1, §10).
@@ -52,44 +41,9 @@ export function Composer({ purpose, onDone, revise, onCancelRevise }: {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   // Browsers only allow the microphone on https pages (and localhost).
   const canRecord = Platform.OS !== 'web' || (globalThis as { isSecureContext?: boolean }).isSecureContext !== false;
-  const onDevice = useState(deviceSpeech)[0];
-  // Several composers can be on screen; only the one that started listening takes the words.
-  const dictating = useRef(false);
-  const before = useRef('');
-
-  useSpeechRecognitionEvent('result', (e) => {
-    if (!dictating.current) return;
-    const heard = e.results[0]?.transcript?.trim();
-    if (heard) setText(before.current ? `${before.current} ${heard}` : heard);
-  });
-  useSpeechRecognitionEvent('end', () => {
-    if (!dictating.current) return;
-    dictating.current = false;
-    setRecording(false);
-  });
-  useSpeechRecognitionEvent('error', (e) => {
-    if (!dictating.current) return;
-    dictating.current = false;
-    setRecording(false);
-    if (e.error !== 'aborted' && e.error !== 'no-speech') setError(t.voiceUnavailable);
-  });
-
-  async function toggleDictation() {
-    setError(null);
-    try {
-      if (recording) return ExpoSpeechRecognitionModule.stop();
-      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!perm.granted) return setError(t.voiceUnavailable);
-      before.current = text.trim();
-      dictating.current = true;
-      setRecording(true);
-      ExpoSpeechRecognitionModule.start({ lang: SPEECH_LANG[locale], interimResults: true, continuous: false });
-    } catch {
-      dictating.current = false;
-      setRecording(false);
-      setError(t.voiceUnavailable);
-    }
-  }
+  const dictation = useDictation({ text, setText, locale, onError: () => setError(t.voiceUnavailable) });
+  const onDevice = dictation.available;
+  const listening = recording || dictation.listening;
 
   async function interpret(body: { text?: string; audioAssetId?: string }) {
     setBusy(true);
@@ -196,32 +150,32 @@ export function Composer({ purpose, onDone, revise, onCancelRevise }: {
         </View>
       ) : null}
       {error ? <Notice text={error} tone="warn" /> : null}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, backgroundColor: th.card, borderRadius: 26, borderWidth: 1, borderColor: recording ? th.warn : th.line, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, backgroundColor: th.card, borderRadius: 26, borderWidth: 1, borderColor: listening ? th.warn : th.line, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 }}>
         <TextInput
-          value={recording && !text ? t.listening : text}
-          editable={!recording && !busy}
+          value={listening && !text ? t.listening : text}
+          editable={!listening && !busy}
           onChangeText={setText}
           placeholder={purpose === 'request' ? t.needPlaceholder : t.offerPlaceholder}
           placeholderTextColor={th.mute}
           multiline
           accessibilityLabel={purpose === 'request' ? t.needPlaceholder : t.offerPlaceholder}
-          style={{ flex: 1, fontSize: 17, lineHeight: 25, color: recording ? th.warn : th.ink, maxHeight: 120, paddingVertical: 8, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) }}
+          style={{ flex: 1, fontSize: 17, lineHeight: 25, color: listening ? th.warn : th.ink, maxHeight: 120, paddingVertical: 8, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) }}
         />
         {busy ? (
           <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={th.accent} /></View>
-        ) : canSend && !recording ? (
+        ) : canSend && !listening ? (
           <Pressable accessibilityRole="button" accessibilityLabel={t.send} onPress={() => interpret({ text: text.trim() })}
             style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: th.accent, alignItems: 'center', justifyContent: 'center' }}>
             <Txt size={20} weight="700" color={th.accentInk}>↑</Txt>
           </Pressable>
         ) : canRecord && (onDevice || voiceInput) ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={recording ? t.listening : t.holdToTalk} onPress={onDevice ? toggleDictation : toggleRecording}
-            style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: recording ? th.warn : th.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-            <Txt size={18} color={recording ? '#fff' : th.accent}>{recording ? '■' : '🎤'}</Txt>
+          <Pressable accessibilityRole="button" accessibilityLabel={listening ? t.listening : t.holdToTalk} onPress={() => { setError(null); void (onDevice ? dictation.toggle() : toggleRecording()); }}
+            style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: listening ? th.warn : th.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Txt size={18} color={listening ? '#fff' : th.accent}>{listening ? '■' : '🎤'}</Txt>
           </Pressable>
         ) : null}
       </View>
-      {purpose === 'request' && !text && !recording && !busy ? <Txt size={13} mute style={{ paddingHorizontal: 8 }}>{t.needExample}</Txt> : null}
+      {purpose === 'request' && !text && !listening && !busy ? <Txt size={13} mute style={{ paddingHorizontal: 8 }}>{t.needExample}</Txt> : null}
 
       <Sheet visible={!!result && !askPlace} onClose={() => setResult(null)}>
         {result ? (

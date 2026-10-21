@@ -42,3 +42,6 @@ export const LOCALITIES: { name: string; lat: number; lng: number }[] = [
   { name: 'Kondhwa / NIBM', lat: 18.4696, lng: 73.8906 },
   { name: 'Wagholi', lat: 18.5808, lng: 73.9787 },
 ];
+
+// Files on our own server come back as paths; files in cloud storage come back as full links.
+export const mediaUrl = (url: string) => (url.startsWith('/') ? `${apiUrl()}${url}` : url);
