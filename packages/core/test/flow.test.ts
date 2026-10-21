@@ -145,6 +145,26 @@ describe('provider profile', () => {
     await intake.removeProof(pro, proofs[0]!.id);
     expect(await intake.listProofs(pro, capId!)).toHaveLength(1);
   });
+
+  it('stores what the guided questions ask: experience in the owner’s words, with proofs on the profile', async () => {
+    const pro = await newUser('Caterer');
+    const [capId] = await offer(pro, 'I cook biryani for parties');
+    await intake.patchCapability(pro, capId!, { experience: 'business', experienceNote: '6 years, about 300 orders' });
+    await intake.addProof(pro, capId!, { link: 'https://instagram.com/biryani.pune' });
+    let cap = (await intake.listCapabilities(pro))[0]!;
+    expect(cap).toMatchObject({ experience: 'business', experienceNote: '6 years, about 300 orders' });
+    expect(cap.proofs).toEqual([expect.objectContaining({ kind: 'link', url: 'https://instagram.com/biryani.pune' })]);
+
+    // Changing only the status leaves the answers alone; null clears them.
+    await intake.patchCapability(pro, capId!, { status: 'paused' });
+    expect((await intake.listCapabilities(pro))[0]).toMatchObject({ status: 'paused', experience: 'business' });
+    await intake.patchCapability(pro, capId!, { experience: null, experienceNote: null });
+    cap = (await intake.listCapabilities(pro))[0]!;
+    expect(cap).toMatchObject({ experience: null, experienceNote: null });
+
+    const stranger = await newUser('Nosy');
+    await expectCode(intake.patchCapability(stranger, capId!, { experience: 'new' }), 'capability_not_found');
+  });
 });
 
 describe('privacy boundaries', () => {

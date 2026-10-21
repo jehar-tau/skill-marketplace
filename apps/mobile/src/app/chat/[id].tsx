@@ -6,6 +6,7 @@ import { FlatList, Image, KeyboardAvoidingView, Platform, Pressable, TextInput, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgreementCard, type Agreement } from '../../features/AgreementCard';
 import { api, newId } from '../../lib/api';
+import { mediaUrl } from '../../lib/config';
 import { dial } from '../../lib/device';
 import { onLive } from '../../lib/realtime';
 import { getJson, setJson } from '../../lib/storage';
@@ -35,7 +36,7 @@ function Photo({ assetId }: { assetId: string }) {
     const poll = async () => {
       const res = await api(`/v1/media/${assetId}`).catch(() => null);
       if (!alive) return;
-      if (res?.thumbUrl) setUrl(res.url);
+      if (res?.thumbUrl) setUrl(mediaUrl(res.url));
       else if (res?.state !== 'rejected' && tries++ < 10) setTimeout(poll, 1500);
     };
     void poll();
@@ -53,7 +54,7 @@ function VoiceNote({ assetId, mine }: { assetId: string; mine: boolean }) {
     try {
       const res = await api(`/v1/media/${assetId}`);
       if (!res?.url) return;
-      const player = createAudioPlayer({ uri: res.url });
+      const player = createAudioPlayer({ uri: mediaUrl(res.url) });
       setPlaying(true);
       player.addListener('playbackStatusUpdate', (st: { didJustFinish?: boolean }) => {
         if (st.didJustFinish) {
@@ -178,7 +179,7 @@ export default function Chat() {
       const blob = await (await fetch(recorder.uri)).blob();
       const mime = (blob.type || (Platform.OS === 'web' ? 'audio/webm' : 'audio/mp4')).split(';')[0]!;
       const up = await api('/v1/media', { body: { kind: 'audio', mime, bytes: blob.size, conversationId: id } });
-      const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'content-type': mime }, body: blob });
+      const put = await fetch(mediaUrl(up.uploadUrl), { method: 'PUT', headers: { 'content-type': mime }, body: blob });
       if (!put.ok) throw new Error('upload');
       if (up.needsComplete) await api(`/v1/media/${up.assetId}/complete`, { method: 'POST' });
       await api(`/v1/conversations/${id}/messages`, { body: { clientMessageId: newId(), mediaAssetId: up.assetId } });
@@ -198,7 +199,7 @@ export default function Chat() {
       const blob = await (await fetch(asset.uri)).blob();
       const mime = (asset.mimeType ?? blob.type ?? 'image/jpeg').split(';')[0]!;
       const up = await api('/v1/media', { body: { kind: 'image', mime, bytes: blob.size, conversationId: id } });
-      const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'content-type': mime }, body: blob });
+      const put = await fetch(mediaUrl(up.uploadUrl), { method: 'PUT', headers: { 'content-type': mime }, body: blob });
       if (!put.ok) throw new Error('upload');
       if (up.needsComplete) await api(`/v1/media/${up.assetId}/complete`, { method: 'POST' });
       await api(`/v1/conversations/${id}/messages`, { body: { clientMessageId: newId(), mediaAssetId: up.assetId } });

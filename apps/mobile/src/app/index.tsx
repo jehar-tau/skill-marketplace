@@ -1,8 +1,8 @@
-import { Redirect, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Composer, type Revise } from '../features/Composer';
+import { Composer } from '../features/Composer';
 import { FindView } from '../features/FindView';
 import { MessagesTab, useConversations } from '../features/MessagesTab';
 import { ProviderHome } from '../features/ProviderHome';
@@ -23,8 +23,9 @@ function Home() {
   const [tab, setTab] = useState<Tab>('profile');
   const [reloadKey, setReloadKey] = useState(0);
   const [name, setName] = useState('');
-  const [revise, setRevise] = useState<Revise | null>(null);
   const convs = useConversations();
+  // Coming back from another screen (such as adding a business) shows the latest.
+  useFocusEffect(useCallback(() => { setReloadKey((k) => k + 1); }, []));
   const unread = (convs.data ?? []).reduce((n, c) => n + c.unread, 0);
 
   // A name is asked for once there is someone to show it to, not during sign-up.
@@ -55,7 +56,6 @@ function Home() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }}>
           <View style={{ flex: 1 }}>
             <Txt size={24} weight="800">{title}</Txt>
-            {tab === 'profile' && me?.displayName ? <Txt size={13} mute lines={1}>{me.displayName}</Txt> : null}
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel={t.settings} onPress={() => router.push('/settings')}
             style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: th.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: th.line }}>
@@ -64,16 +64,14 @@ function Home() {
         </View>
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
-          {tab === 'profile' ? <ProviderHome reloadKey={reloadKey} onNeedName={() => undefined} onEdit={setRevise} />
+          {tab === 'profile' ? <ProviderHome reloadKey={reloadKey} />
             : tab === 'find' ? <FindView reloadKey={reloadKey} />
             : <MessagesTab list={convs.data ?? []} />}
         </ScrollView>
 
-        {tab !== 'messages' ? (
+        {tab === 'find' ? (
           <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8, borderTopWidth: 1, borderTopColor: th.line, backgroundColor: th.bg }}>
-            <Composer key={`${tab}:${revise ? revise.id + revise.text : 'new'}`} purpose={tab === 'profile' ? 'capability' : 'request'}
-              revise={tab === 'profile' ? revise : null} onCancelRevise={() => setRevise(null)}
-              onDone={() => { setRevise(null); setReloadKey((k) => k + 1); }} />
+            <Composer purpose="request" onDone={() => setReloadKey((k) => k + 1)} />
           </View>
         ) : null}
 

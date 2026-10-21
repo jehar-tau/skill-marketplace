@@ -155,10 +155,9 @@ flowchart TD
 1. **Welcome carousel**: who the app is for (a talent, a side income), how it works (we find people who need you, spread the word, build your profile over time), and examples of talents. A small link opens the full list of talent ideas; picking one carries it into the first talent prompt.
 2. **Language**: Marathi, Hindi or English, picked on the welcome screen and changeable in settings.
 3. **Phone number**, then **code**.
-4. **My profile** opens with one question: what are you good at? Speak or type.
-5. The app shows what it understood, in the user's language; the user confirms. Location is asked at this point (device location, or a typed locality). The talent is live immediately.
-6. After the first talent, the app gently asks for optional proof of work (an Instagram page, a website, photos) and says plainly that it is fine to skip.
-7. Alerts permission is asked after the first talent is live, framed as "so you don't miss requests".
+4. **Guided "Add a business" flow** opens straight after the first sign-in, one question per screen, each answered by speaking or typing (§8.2). Only the first question is required; every other step can be skipped.
+5. When it is done, the person lands on **My profile**, showing their name, number, area and the business they just listed.
+6. Alerts permission is asked once a business is live, framed as "so you don't miss requests".
 
 Nothing else is required: no documents, email, category choice or verification. A display name is optional and requested at first chat if missing. Adulthood is covered by the terms.
 
@@ -238,10 +237,19 @@ Three bottom tabs, plus settings and chat screens:
 | **Messages** | Every chat, marked by the user's role in it (helping or being helped), plus **My people** |
 
 ### 8.2 My profile
-- **Add a talent**: speak or type; the app shows the understood talents (one per skill) for confirmation.
-- **Talent card**: what it is, area, pause/resume, edit (re-describe and re-confirm), proof of work, and the private facts the AI has learned (each deletable).
-- **Leads**: each shows what is needed, roughly where, when, and the requester's trust line; reply "Interested" or "Not for me".
-- **Service area**: change base location and radius.
+The first screen after sign-in. From top to bottom:
+- **About you** (visible only to the owner): name (tap to add or change), phone number (masked), area and travel distance (tap to change), and the "looking for work for you" status.
+- **Requests waiting for an answer**, if any: what is needed, roughly where, when, and the requester's trust line; reply "I can help" or "Not for me".
+- **My businesses**, with **+ Add a business**. Each card shows what it is, the experience answer and the person's own words about it, the trust line, photos, links (Instagram, Facebook, LinkedIn, website), and the private facts the AI has learned (each deletable). Actions: edit, pause or resume, remove, add photos or links.
+- This week's numbers, then earlier requests.
+
+**Guided "Add a business" flow** (also used to edit a business), in four steps:
+1. **What do you do?** Speak or type in plain words; the app shows what it understood (one card per skill if several were described) to confirm or change.
+2. **Have you done this before?** "I run it as a business", "for friends and family", or "not yet, but I am good at it", plus an optional few words ("5 years, about 200 orders"). Where the person is, if not already known.
+3. **Photos**: past work if they have done it before; otherwise "show us something you have made" (a photo, certificate or sample). Optional.
+4. **Are you online?** Instagram, Facebook, LinkedIn and any other link; a plain handle such as "@name" becomes the page address. Optional.
+
+The business goes live at the end of step 2; photos and links are added to it as they are given. Experience answers, photos and links are private to the owner for now.
 
 ### 8.3 Find help
 - Describe the need; the confirmation shows quantities, dates, prices and diet restrictions exactly as understood.
@@ -330,7 +338,7 @@ Realtime in-app updates (new lead, new message, status changes) arrive over the 
 - **Catch-up**: on reconnect the client sends its last known positions (`POST /v1/sync`) and receives everything newer.
 - **Offline**: outgoing messages queue locally and resend with the same id.
 - **Receipts**: `delivered_seq` and `read_seq` per participant.
-- **Attachments**: images (processed, EXIF stripped, thumbnailed before the other side sees them, 10 MB cap) and voice notes (audio, 60 s). Files are served only to participants through signed URLs.
+- **Attachments**: images (processed, EXIF stripped, thumbnailed before the other side sees them, 10 MB cap) and voice notes (audio, 60 s). Files are served only to participants through signed links; links to files on our own server are relative, so each app joins them to the server address it already uses.
 
 ---
 
@@ -341,14 +349,14 @@ Realtime in-app updates (new lead, new message, status changes) arrive over the 
 - `cell_id` on every domain table.
 - Monthly range partitions on `messages`, `outbox_events`, `notification_attempts`, `ai_runs`, `audit_events`.
 - Application-level encryption for phone numbers and verification references only, so text search works.
-- Forward-only migrations in `packages/core/migrations` (`001`–`008`), run in CI and on deploy.
+- Forward-only migrations in `packages/core/migrations` (`001`–`009`), run in CI and on deploy.
 
 ### 13.2 Tables
 | Area | Tables |
 | --- | --- |
 | Identity | `accounts` (incl. `ai_learning`), `otp_challenges`, `sessions`, `provider_settings`, `consents`, `verifications` |
 | Taxonomy and AI | `service_categories`, `utterances`, `interpretations`, `embedding_models`, `matching_config`, `capability_embeddings_<key>`, `request_embeddings_<key>`, `ai_runs` |
-| Talents and requests | `capabilities`, `capability_versions`, `capability_proofs`, `profile_insights`, `requests`, `request_versions` |
+| Talents and requests | `capabilities` (incl. `experience`, `experience_note`), `capability_versions`, `capability_proofs`, `profile_insights`, `requests`, `request_versions` |
 | Dispatch | `dispatch_waves`, `matches` (`UNIQUE(request_id, provider_account_id)`), `notification_attempts`, `lead_events` |
 | Chat | `conversations`, `conversation_participants`, `messages` (kinds incl. text, image, audio, system), `media_assets`, `contact_shares`, `saved_people` |
 | Trust | `agreements`, `job_confirmations`, `ratings`, `capability_trust`, `requester_trust` |
@@ -377,7 +385,7 @@ GiST on capability base points; `(cell_id, category_id, status)` on capabilities
 | Staging | `staging` | Render free web service + Supabase, from `render.yaml` |
 | Production | `main` | To be decided before public launch |
 
-Work happens on feature branches with pull requests into `dev`, then `dev → staging → main`. CI runs typecheck, migrations, 25 integration tests against a separate test database, and the AI evaluation. A release workflow builds the server image to GHCR; another keeps the free staging service awake. Secrets live only in `.env` (never committed) and the hosting provider's settings.
+Work happens on feature branches with pull requests into `dev`, then `dev → staging → main`. CI runs typecheck, migrations, 26 integration tests against a separate test database, and the AI evaluation. A release workflow builds the server image to GHCR; another keeps the free staging service awake. Secrets live only in `.env` (never committed) and the hosting provider's settings.
 
 ### 14.3 Clients
 - **Web**: served by the API at its own address; installable; index never cached, assets fingerprinted.
@@ -458,7 +466,7 @@ The default server (with the in-server model) runs in 358 MB, inside a free 512 
 
 ## 19. Current status
 
-**Verified**: end-to-end flows in a browser at phone size (sign-in, talents, requests, live leads, chat, number sharing, agreement, confirmation, rating, proof of work, three tabs); 25 automated tests; evaluation 25/25; no-cost mode in a 512 MB container; voice typing with a simulated recogniser.
+**Verified**: end-to-end flows in a browser at phone size (sign-in, talents, requests, live leads, chat, number sharing, agreement, confirmation, rating, proof of work, three tabs); 26 automated tests; evaluation 25/25; no-cost mode in a 512 MB container; voice typing with a simulated recogniser.
 
 **Not yet verified**: the APK on a real phone, real push delivery, Fast2SMS, WhatsApp, Supabase and Render staging, voice on a real phone, Marathi and Hindi wording review by native speakers.
 
